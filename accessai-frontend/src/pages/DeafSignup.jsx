@@ -1,4 +1,5 @@
 import { useState } from "react";
+import BackButton from "../components/BackButton";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
@@ -56,8 +57,11 @@ export default function DeafSignup() {
 
       {/* Header */}
       <header className="fixed top-0 w-full z-50 flex justify-between items-center px-margin-mobile md:px-margin-desktop h-16 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 shadow-sm">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
-          <span className="text-2xl font-bold text-primary font-headline">AccessAI</span>
+        <div className="flex items-center gap-3">
+          <BackButton fallback="/?step=mode" />
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
+            <span className="text-2xl font-bold text-primary font-headline">AccessAI</span>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <LanguageSelector compact={true} />

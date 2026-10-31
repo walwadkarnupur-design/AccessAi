@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import BackButton from "../components/BackButton";
 import { useNavigate } from "react-router-dom";
 import API from "../services/api";
 import VoiceEmailInput from "../components/VoiceEmailInput";
@@ -211,8 +212,11 @@ export default function BlindLogin() {
 
       {/* Header */}
       <header className="fixed top-0 w-full z-50 flex justify-between items-center px-margin-mobile md:px-margin-desktop h-16 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 shadow-sm">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
-          <span className="text-2xl font-bold text-primary font-headline">AccessAI</span>
+        <div className="flex items-center gap-3">
+          <BackButton fallback="/?step=mode" />
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
+            <span className="text-2xl font-bold text-primary font-headline">AccessAI</span>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-primary-fixed text-primary border border-outline-variant/20 uppercase tracking-widest">

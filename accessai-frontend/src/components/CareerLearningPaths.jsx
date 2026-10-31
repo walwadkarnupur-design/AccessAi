@@ -611,7 +611,7 @@ export default function CareerLearningPaths({
             {/* Visual Certificate Preview */}
             <div className="rounded-2xl overflow-hidden border-2 border-primary/20 shadow-md bg-slate-50">
               <img
-                src={`http://127.0.0.1:5000/certificate/image/${activeCertData.certificateId}`}
+                src={`/certificate/image/${activeCertData.certificateId}`}
                 alt="Career Readiness Certificate"
                 className="w-full h-auto object-contain"
                 onError={(e) => {
@@ -669,7 +669,7 @@ export default function CareerLearningPaths({
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200">
               <div className="flex flex-wrap items-center gap-2">
                 <a
-                  href={`http://127.0.0.1:5000/certificate/download/${activeCertData.certificateId}`}
+                  href={`/certificate/download/${activeCertData.certificateId}`}
                   download={`AccessAI_Career_Certificate_${activeCertData.certificateId}.pdf`}
                   className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all font-headline cursor-pointer"
                 >
@@ -678,7 +678,7 @@ export default function CareerLearningPaths({
                 </a>
 
                 <a
-                  href={`http://127.0.0.1:5000/certificate/view/${activeCertData.certificateId}`}
+                  href={`/certificate/view/${activeCertData.certificateId}`}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs border border-slate-300 transition-all font-headline cursor-pointer"

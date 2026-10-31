@@ -34,25 +34,35 @@ export default function LanguageSelector({ className = "", compact = false }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
+  const getPrefix = (code) => {
+    switch (code) {
+      case "en":
+        return "Eng";
+      case "hi":
+        return "Hin";
+      case "kn":
+        return "Kan";
+      default:
+        return code.toUpperCase();
+    }
+  };
+
   return (
     <div ref={dropdownRef} className={`relative inline-block text-left ${className}`}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-outline-variant/40 bg-surface/80 hover:bg-surface-container-high text-on-surface text-xs font-semibold backdrop-blur-md transition-all active:scale-95 shadow-sm cursor-pointer"
+        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-all active:scale-95 shadow-xs cursor-pointer"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`${t("choose_language")}: ${currentLang.nativeName}`}
         title={t("choose_language")}
       >
-        <span className="text-sm select-none" role="img" aria-hidden="true">
-          {currentLang.flag}
-        </span>
-        <span className="hidden sm:inline tracking-wide font-medium">
-          {compact ? currentLang.code.toUpperCase() : currentLang.nativeName}
-        </span>
+        <span className="material-symbols-outlined !text-base text-slate-500">language</span>
+        <span className="font-semibold text-slate-800">{getPrefix(currentLang.code)}</span>
+        <span className="text-slate-700">{currentLang.code === "en" ? "English" : currentLang.nativeName}</span>
         <span
-          className="material-symbols-outlined !text-base text-on-surface-variant transition-transform duration-200"
+          className="material-symbols-outlined !text-base text-slate-400 transition-transform duration-200"
           style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
         >
           expand_more

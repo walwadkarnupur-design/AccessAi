@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import CertificateVerification from "../components/CertificateVerification";
 import WalletBadge from "../components/WalletBadge";
+import BackButton from "../components/BackButton";
 import { CONTRACT_ADDRESS } from "../services/blockchain";
 
 export default function VerifyCertificatePage() {
@@ -11,11 +12,14 @@ export default function VerifyCertificatePage() {
     <div className="min-h-screen bg-background text-on-surface font-sans selection:bg-primary-fixed selection:text-primary flex flex-col justify-between">
       {/* ── Fixed Header ── */}
       <header className="fixed top-0 w-full z-50 flex justify-between items-center px-margin-mobile md:px-margin-desktop h-16 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 shadow-sm">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
-          <span className="text-2xl font-bold text-primary font-headline">AccessAI</span>
-          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hidden sm:inline-block">
-            MST Blockchain Verified
-          </span>
+        <div className="flex items-center gap-3">
+          <BackButton fallback="/" />
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
+            <span className="text-2xl font-bold text-primary font-headline">AccessAI</span>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hidden sm:inline-block">
+              MST Blockchain Verified
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">

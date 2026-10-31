@@ -501,7 +501,8 @@ export default function SignAvatarAssistant({
   onOpenSignPractice,
   onSelect,
   isLight = false,
-  className = ""
+  className = "",
+  embedded = false
 }) {
   const { t, language } = useLanguage();
   const [isOpen, setIsOpen] = useState(true); // Floating window open/close state
@@ -1271,6 +1272,295 @@ export default function SignAvatarAssistant({
       ctx.fill();
     });
   };
+
+  if (embedded) {
+    return (
+      <aside className={`w-[300px] h-screen max-h-screen bg-slate-950 text-slate-100 border-l border-slate-800/80 flex flex-col justify-between flex-shrink-0 overflow-hidden relative font-sans ${className}`}>
+        {/* Top Content (Header + Stage + Tabs + Active Tab) */}
+        <div className="flex flex-col flex-1 overflow-y-auto min-h-0">
+          {/* Header Bar */}
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-slate-900/90 flex-shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="relative w-7 h-7 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/30 flex-shrink-0">
+                <span className="material-symbols-outlined !text-lg">sign_language</span>
+                {cameraActive && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-slate-950 animate-pulse" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1 min-w-0">
+                  <h4 className="font-bold text-[11px] text-white truncate">{t("nova_bot_title", "Nova • Sign Avatar Bot")}</h4>
+                  <span className="text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex-shrink-0">
+                    Live
+                  </span>
+                </div>
+                <p className="text-[9px] text-slate-400 truncate">{t("nova_tagline", "Available across all tabs")}</p>
+              </div>
+            </div>
+
+            {/* Speaker Toggle */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !audioVoiceEnabled;
+                  setAudioVoiceEnabled(next);
+                  if (next) {
+                    triggerAvatarResponse("🔊 Voice Audio Enabled.", "wave", "Voice audio enabled.");
+                  } else {
+                    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+                    triggerAvatarResponse("🔇 Silent Mode active.", "nod");
+                  }
+                }}
+                className={`p-1 rounded-lg border text-[9px] font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                  audioVoiceEnabled
+                    ? "bg-indigo-600 text-white border-indigo-400"
+                    : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700"
+                }`}
+                title={audioVoiceEnabled ? "Voice ON (Speaks aloud)" : "Silent Mode (Visual only for deaf users)"}
+              >
+                <span className="material-symbols-outlined !text-xs">
+                  {audioVoiceEnabled ? "volume_up" : "volume_off"}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3D WebGL Avatar Mini Stage */}
+          <div className="w-full h-44 relative bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-b border-cyan-500/20 flex flex-col justify-between p-2 flex-shrink-0 overflow-hidden">
+            {/* Status Indicator */}
+            <div className="w-full flex items-center justify-between z-10">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/85 border border-cyan-500/30 text-[9px]">
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  avatarMood === "executing" ? "bg-amber-400 animate-ping" :
+                  avatarMood === "recognized" ? "bg-cyan-400 animate-bounce" :
+                  cameraActive ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                }`} />
+                <span className="text-slate-200 font-semibold uppercase tracking-wider text-[8px] truncate">
+                  {avatarMood === "executing" ? "Command Executed" :
+                   avatarMood === "recognized" ? `Detecting: ${detectedGesture}` :
+                   cameraActive ? "Watching signs..." : "Ready"}
+                </span>
+              </div>
+
+              {holdProgress > 0 && (
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-cyan-950/90 border border-cyan-400 text-cyan-300 text-[9px] font-bold">
+                  <span>{holdProgress}%</span>
+                  <div className="w-6 h-1 rounded-full bg-slate-700 overflow-hidden">
+                    <div className="h-full bg-cyan-400" style={{ width: `${holdProgress}%` }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Embedded Three.js 3D Avatar */}
+            <div className="w-full h-36 relative flex items-center justify-center -my-1">
+              <Avatar3DCanvas
+                avatarAction={avatarAction}
+                isSpeaking={isSpeaking}
+                status={avatarMood}
+                className="w-full h-full"
+              />
+            </div>
+
+            {/* Mini Live Captions */}
+            <div className="w-full z-10 px-2.5 py-1 rounded-xl bg-slate-900/90 border border-cyan-500/30 text-[10px] font-semibold text-white truncate flex items-center gap-1">
+              <span className="text-cyan-400 text-xs">💬</span>
+              <span className="truncate">{captionText}</span>
+            </div>
+          </div>
+
+          {/* Bot Navigation Tabs */}
+          <div className="flex border-b border-slate-800 bg-slate-900/80 px-1 pt-1 gap-0.5 flex-shrink-0">
+            {[
+              { id: "camera", label: "Sign Camera", icon: "videocam" },
+              { id: "chat", label: "Captions", icon: "forum" },
+              { id: "guide", label: "Guide", icon: "menu_book" }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex-1 py-1.5 text-[11px] font-bold flex items-center justify-center gap-1 rounded-t-lg transition-all border-b-2 ${
+                  activeTab === tab.id
+                    ? "text-cyan-400 border-cyan-400 bg-slate-800/80"
+                    : "text-slate-400 border-transparent hover:text-slate-200"
+                }`}
+              >
+                <span className="material-symbols-outlined !text-sm">{tab.icon}</span>
+                <span className="truncate">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-2.5 flex flex-col gap-2.5 flex-1 overflow-y-auto">
+            {activeTab === "camera" && (
+              <div className="flex flex-col gap-2.5">
+                {/* Camera Video Feed */}
+                <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center group shadow-inner">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover transform -scale-x-100 ${cameraActive ? "block" : "hidden"}`}
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    width={640}
+                    height={480}
+                    className={`absolute inset-0 w-full h-full object-cover transform -scale-x-100 pointer-events-none ${cameraActive ? "block" : "hidden"}`}
+                  />
+
+                  {cameraActive ? (
+                    <>
+                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-slate-900/85 backdrop-blur-md border border-cyan-500/40 text-[10px] text-white flex items-center gap-1">
+                        <span className="font-bold text-cyan-400">{detectedGesture !== "None" ? detectedGesture : "Ready"}</span>
+                        {detectedConfidence > 0 && (
+                          <span className="text-[8px] px-1 rounded bg-cyan-500/20 text-cyan-300 font-mono">
+                            {detectedConfidence}%
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={stopCamera}
+                        className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-md bg-red-600/90 hover:bg-red-600 text-white text-[9px] font-bold flex items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined !text-xs">videocam_off</span>
+                        <span>Stop</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="text-center p-3 flex flex-col items-center gap-1.5">
+                      <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center">
+                        <span className="material-symbols-outlined !text-xl">videocam</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        {t("turn_on_camera_hint", "Turn on camera to control with gestures.")}
+                      </p>
+                      {modelError ? (
+                        <div className="text-[9px] text-red-400 bg-red-950/60 p-1 rounded-md">
+                          {modelError}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          disabled={modelLoading}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 text-white text-[11px] font-bold shadow-md shadow-cyan-500/20 flex items-center gap-1 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined !text-sm">play_arrow</span>
+                          <span>{modelLoading ? "Loading AI..." : "Enable Sign Camera"}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Commands Grid 2x2 */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-300">
+                    <span>Quick Commands:</span>
+                    <span className="text-[9px] text-cyan-400">Hold 0.6s to trigger</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {commands.slice(0, 4).map((cmd) => {
+                      const isCurrent = detectedGesture === cmd.gesture;
+                      return (
+                        <button
+                          key={cmd.gesture}
+                          type="button"
+                          onClick={() => executeSignAction(cmd)}
+                          className={`p-1.5 rounded-lg border text-left flex items-center gap-1.5 transition-all cursor-pointer ${
+                            isCurrent
+                              ? "bg-cyan-500/20 border-cyan-400 text-white ring-1 ring-cyan-400"
+                              : "bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850"
+                          }`}
+                        >
+                          <span className="text-base flex-shrink-0">{cmd.icon}</span>
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-bold text-white truncate">{cmd.actionName}</div>
+                            <div className="text-[8px] text-slate-400 font-mono truncate">{cmd.signName}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "chat" && (
+              <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+                {chatHistory.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col gap-0.5 text-[11px] max-w-[90%] ${
+                      msg.sender === "user" ? "self-end items-end" : "self-start items-start"
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl ${
+                      msg.sender === "user"
+                        ? "bg-cyan-600 text-white rounded-br-none"
+                        : "bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700"
+                    }`}>
+                      {msg.text}
+                    </div>
+                    <span className="text-[8px] text-slate-500 px-1">{msg.time}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === "guide" && (
+              <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-1">
+                <div className="text-[10px] font-bold text-cyan-300">Recognized Gestures:</div>
+                {SIGN_COMMANDS.map((cmd) => (
+                  <div
+                    key={cmd.gesture}
+                    onClick={() => executeSignAction(cmd)}
+                    className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-cyan-400/60 flex items-start gap-2 cursor-pointer transition-colors"
+                  >
+                    <span className="text-lg p-0.5 bg-slate-950 rounded border border-slate-800 flex-shrink-0">{cmd.icon}</span>
+                    <div className="min-w-0">
+                      <div className="font-bold text-[10px] text-cyan-300 truncate">{cmd.actionName}</div>
+                      <div className="text-[8px] text-slate-300 font-mono truncate">{cmd.signName}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Floating "Nova Sign AI" launcher pill button in bottom-right of column 3 */}
+        <div className="p-2.5 border-t border-slate-800/80 bg-slate-950 flex justify-end flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("camera");
+              if (!cameraActive) startCamera();
+            }}
+            className="w-full py-2 px-3 rounded-full bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 text-white text-xs font-bold shadow-lg shadow-cyan-500/20 hover:scale-102 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer border border-cyan-400/40"
+            title="Nova Sign AI Assistant"
+          >
+            <span className="material-symbols-outlined !text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
+              sign_language
+            </span>
+            <span className="truncate">Nova Sign AI</span>
+            {cameraActive && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            )}
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
 
   return (
     <div className={`fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-3 font-sans ${className}`}>

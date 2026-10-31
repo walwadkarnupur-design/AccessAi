@@ -188,8 +188,8 @@ export default function DegreeGraduationOffer({
   const activeCert = claimSuccess || degreeData.degreeCertificate;
 
   const publicVerificationUrl = activeCert
-    ? `http://localhost:3000/verify?id=${activeCert.certificateId}`
-    : `http://localhost:3000/verify?id=CERT-DEGREE-HONORS-EETEST`;
+    ? `/verify?id=${activeCert.certificateId}`
+    : `/verify?id=CERT-DEGREE-HONORS-EETEST`;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(publicVerificationUrl);
@@ -460,7 +460,7 @@ export default function DegreeGraduationOffer({
               </button>
 
               <a
-                href={`http://127.0.0.1:5000/certificate/download/${activeCert.certificateId}`}
+                href={`/certificate/download/${activeCert.certificateId}`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-4 py-3 rounded-2xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-bold text-xs border border-outline-variant/40 transition-all flex items-center gap-1.5"
@@ -571,7 +571,7 @@ export default function DegreeGraduationOffer({
               {/* Diploma Graphic Preview */}
               <div className="rounded-2xl overflow-hidden border-2 border-amber-300 shadow-lg relative bg-slate-900 group">
                 <img
-                  src={`http://127.0.0.1:5000/certificate/image/${activeCert.certificateId}`}
+                  src={`/certificate/image/${activeCert.certificateId}`}
                   alt="AccessAI Academic Honors Degree"
                   className="w-full h-auto object-contain max-h-[500px] mx-auto"
                   onError={(e) => {
@@ -654,7 +654,7 @@ export default function DegreeGraduationOffer({
 
               <div className="flex items-center gap-2">
                 <a
-                  href={`http://127.0.0.1:5000/certificate/download/${activeCert.certificateId}`}
+                  href={`/certificate/download/${activeCert.certificateId}`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-5 py-2.5 rounded-xl bg-primary hover:brightness-110 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
