@@ -1,15 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../services/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import API from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import LanguageSelector from "../components/LanguageSelector";
 
 export default function DeafSignup() {
   const navigate = useNavigate();
-  const { loginDemoUser, DEMO_MODE } = useAuth();
+  const { signUp, loginDemoUser } = useAuth();
   const { t } = useLanguage();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -35,25 +32,15 @@ export default function DeafSignup() {
     }
     setLoading(true);
     setError("");
-    if (DEMO_MODE) {
-      loginDemoUser("deaf", email);
-      navigate("/deaf");
-      setLoading(false);
-      return;
-    }
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await userCredential.user.getIdToken();
-      try {
-        await API.post("/register", {
-          name: fullName,
-          email,
-          idToken,
-          phone,
-          disabilityType: accessibilityPref
-        });
-      } catch {}
-      navigate("/deaf");
+      await signUp({
+        name: fullName,
+        email,
+        password,
+        phone,
+        disabilityType: accessibilityPref
+      });
+      navigate(`/${accessibilityPref}`);
     } catch (err) {
       setError(err.message || "Registration failed. Try again.");
     } finally {
@@ -75,135 +62,138 @@ export default function DeafSignup() {
         <div className="flex items-center gap-3">
           <LanguageSelector compact={true} />
           <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-primary-fixed text-primary border border-outline-variant/20 uppercase tracking-widest">
-            {t("mode_deaf_title", "Deaf Mode")}
+            {t("mode_deaf", "Deaf Mode")}
           </span>
         </div>
       </header>
 
       {/* Card */}
-      <div className="w-full max-w-lg bg-white/70 backdrop-blur-2xl border border-outline-variant/30 rounded-3xl p-8 shadow-lg relative z-10 flex flex-col gap-6">
-        {loading && (
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-3xl flex items-center justify-center z-50">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-primary animate-spin" />
-              <p className="text-sm font-semibold text-on-surface-variant">{t("btn_creating_account", "Creating account...")}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-col items-center text-center gap-2">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
-            <span className="material-symbols-outlined !text-2xl">person_add</span>
-          </div>
-          <h1 className="text-2xl font-bold text-on-surface tracking-tight font-headline">{t("title_signup_deaf", "Create Deaf Account")}</h1>
-          <p className="text-on-surface-variant text-sm leading-relaxed">
-            {t("sub_signup_deaf", "Register your profile. Configure your caption and visual settings.")}
+      <div className="w-full max-w-md bg-surface border border-outline-variant/30 shadow-2xl rounded-3xl p-8 backdrop-blur-xl relative z-10 my-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-extrabold text-on-surface font-headline tracking-tight mb-2">
+            {t("create_account", "Create Account")}
+          </h1>
+          <p className="text-sm text-on-surface-variant font-medium">
+            {t("signup_subtitle", "Sign up to begin your personalized learning journey.")}
           </p>
         </div>
 
         {error && (
-          <div className="p-3.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-medium">
-            {error}
+          <div className="mb-6 p-4 rounded-2xl bg-error-container/40 border border-error/30 text-error text-xs flex items-center gap-2 font-medium">
+            <span className="material-symbols-outlined text-sm">error</span>
+            <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider">{t("field_full_name", "Full Name")}</label>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-outline-variant/50 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface text-base transition-all"
-                placeholder="John Doe"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider">{t("field_email", "Email Address")}</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-outline-variant/50 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface text-base transition-all"
-                placeholder="name@example.com"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+              {t("label_full_name", "Full Name")}
+            </label>
+            <input
+              type="text"
+              required
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="e.g. John Doe"
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-2xl text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-outline/60 text-sm"
+            />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider">{t("field_phone", "Phone Number")}</label>
-              <input
-                type="tel"
-                required
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-outline-variant/50 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface text-base transition-all"
-                placeholder="+1 (555) 000-0000"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider">{t("field_accessibility", "Accessibility Preferences")}</label>
-              <select
-                value={accessibilityPref}
-                onChange={(e) => setAccessibilityPref(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-outline-variant/50 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface text-base transition-all appearance-none cursor-pointer"
-              >
-                <option value="deaf">{t("pref_deaf", "Deaf / Hard of Hearing")}</option>
-                <option value="blind">{t("pref_blind", "Blind / Low Vision")}</option>
-                <option value="motor">{t("pref_motor", "Motor Impaired")}</option>
-                <option value="none">{t("pref_none", "None")}</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+              {t("label_email", "Email Address")}
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@example.com"
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-2xl text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-outline/60 text-sm"
+            />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider">{t("field_password", "Password")}</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-outline-variant/50 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface text-base transition-all"
-                placeholder="••••••••"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+              {t("label_phone", "Mobile Number (10 Digits)")}
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="9876543210"
+              maxLength={10}
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-2xl text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-outline/60 text-sm"
+            />
+          </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider">{t("field_confirm_password", "Confirm Password")}</label>
-              <input
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-outline-variant/50 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface text-base transition-all"
-                placeholder="••••••••"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+              {t("label_password", "Password")}
+            </label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              minLength={6}
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-2xl text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-outline/60 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+              {t("label_confirm_password", "Confirm Password")}
+            </label>
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              minLength={6}
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-2xl text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-outline/60 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+              {t("accessibility_preference", "Accessibility Preference")}
+            </label>
+            <select
+              value={accessibilityPref}
+              onChange={(e) => setAccessibilityPref(e.target.value)}
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-2xl text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all text-sm cursor-pointer"
+            >
+              <option value="deaf">{t("pref_deaf", "Deaf Mode (Sign Language Avatar)")}</option>
+              <option value="blind">{t("pref_blind", "Blind Mode (Screen Reader & Audio)")}</option>
+              <option value="motor">{t("pref_motor", "Motor Impaired (Gaze & Switch Navigation)")}</option>
+            </select>
           </div>
 
           <button
             type="submit"
-            className="w-full py-4 bg-primary hover:brightness-110 active:scale-[0.98] text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all duration-200 shadow-md shadow-primary/20 mt-2 cursor-pointer"
+            disabled={loading}
+            className="w-full py-4 mt-2 rounded-2xl bg-gradient-to-r from-primary to-secondary text-on-primary font-bold shadow-lg shadow-primary/25 hover:opacity-95 active:scale-[0.98] transition-all disabled:opacity-50 text-sm flex items-center justify-center gap-2 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-base">person_add</span>
-            <span>{t("btn_create_account", "Create Account")}</span>
+            {loading ? (
+              <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+            ) : (
+              <span>{t("sign_up", "Sign Up")}</span>
+            )}
           </button>
         </form>
 
-        <div className="text-center text-xs text-on-surface-variant border-t border-outline-variant/20 pt-4">
-          {t("btn_already_registered", "Already registered?")}{" "}
+        <div className="mt-8 text-center text-xs text-on-surface-variant">
+          <span>{t("already_have_account", "Already have an account?")} </span>
           <button
+            type="button"
             onClick={() => navigate("/deaf/login")}
-            className="text-primary font-semibold hover:underline cursor-pointer"
+            className="text-primary font-bold hover:underline cursor-pointer"
           >
-            {t("btn_back_to_login", "Back to Login")}
+            {t("sign_in", "Sign In")}
           </button>
         </div>
       </div>

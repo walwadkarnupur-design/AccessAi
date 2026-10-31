@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../services/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import API from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
 export default function DeafLogin() {
   const navigate = useNavigate();
-  const { loginDemoUser, DEMO_MODE } = useAuth();
+  const { signIn, loginDemoUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,32 +14,15 @@ export default function DeafLogin() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    
-    // TEMPORARY DEMO MODE BYPASS: Navigate directly to Deaf Dashboard
-    loginDemoUser("deaf", email);
-    navigate("/deaf");
-    setLoading(false);
-    
-    /* Original Firebase Code:
-    if (DEMO_MODE) {
-      loginDemoUser("deaf", email);
-      navigate("/deaf");
-      setLoading(false);
-      return;
-    }
+
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const idToken = await userCredential.user.getIdToken();
-      try {
-        await API.post("/login", { idToken });
-      } catch {}
+      await signIn(email, password);
       navigate("/deaf");
     } catch (err) {
       setError(err.message || "Invalid credentials. Please try again.");
     } finally {
       setLoading(false);
     }
-    */
   };
 
   return (
@@ -63,115 +43,78 @@ export default function DeafLogin() {
         </div>
       </header>
 
-      {/* Auth Card */}
-      <div className="w-full max-w-md bg-white/70 backdrop-blur-2xl border border-outline-variant/30 rounded-3xl p-8 md:p-10 shadow-lg relative z-10 flex flex-col gap-6">
-        {loading && (
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-3xl flex items-center justify-center z-50">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-primary animate-spin" />
-              <p className="text-sm font-semibold text-on-surface-variant">Signing in...</p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-col items-center text-center gap-2">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
-            <span className="material-symbols-outlined !text-2xl">lock_open</span>
-          </div>
-          <h1 className="text-2xl font-bold text-on-surface tracking-tight font-headline">Sign In</h1>
-          <p className="text-on-surface-variant text-sm leading-relaxed">
-            Welcome back. Access your hearing-adapted learning materials.
-          </p>
+      {/* Card */}
+      <div className="w-full max-w-md bg-surface border border-outline-variant/30 shadow-2xl rounded-3xl p-8 backdrop-blur-xl relative z-10">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-extrabold text-on-surface font-headline tracking-tight mb-2">Welcome Back</h1>
+          <p className="text-sm text-on-surface-variant font-medium">Log in to continue your sign-supported learning.</p>
         </div>
 
         {error && (
-          <div className="p-3.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-medium">
-            {error}
+          <div className="mb-6 p-4 rounded-2xl bg-error-container/40 border border-error/30 text-error text-xs flex items-center gap-2 font-medium">
+            <span className="material-symbols-outlined text-sm">error</span>
+            <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider">Email Address</label>
+          <div>
+            <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Email Address</label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-outline-variant/50 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface text-base transition-all"
               placeholder="name@example.com"
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-2xl text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-outline/60 text-sm"
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider">Password</label>
+          <div>
+            <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Password</label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-outline-variant/50 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface text-base transition-all"
               placeholder="••••••••"
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-2xl text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-outline/60 text-sm"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-4 bg-primary hover:brightness-110 active:scale-[0.98] text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all duration-200 shadow-md shadow-primary/20 mt-2 cursor-pointer"
+            disabled={loading}
+            className="w-full py-4 mt-2 rounded-2xl bg-gradient-to-r from-primary to-secondary text-on-primary font-bold shadow-lg shadow-primary/25 hover:opacity-95 active:scale-[0.98] transition-all disabled:opacity-50 text-sm flex items-center justify-center gap-2 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-base">login</span>
-            <span>Sign In</span>
+            {loading ? (
+              <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+            ) : (
+              <span>Sign In</span>
+            )}
           </button>
         </form>
 
-        <div className="flex items-center my-1">
-          <div className="flex-1 border-t border-outline-variant/20"></div>
-          <span className="px-3 text-xs text-on-surface-variant font-medium">Or</span>
-          <div className="flex-1 border-t border-outline-variant/20"></div>
+        {/* Demo Fast Login Option */}
+        <div className="mt-4 pt-4 border-t border-outline-variant/20 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              loginDemoUser("deaf", "goyalvrusha@gmail.com", "Vrusha Goyal");
+              navigate("/deaf");
+            }}
+            className="w-full py-2.5 rounded-xl border border-outline-variant/40 hover:bg-surface-container text-xs text-on-surface-variant font-medium transition-all"
+          >
+            1-Click Demo Account (Vrusha Goyal)
+          </button>
         </div>
 
-        <button
-          onClick={async () => {
-            setLoading(true);
-            setError("");
-            
-            // TEMPORARY DEMO MODE BYPASS: Navigate directly to Deaf Dashboard
-            loginDemoUser("deaf", "goyalvrusha@gmail.com");
-            navigate("/deaf");
-            setLoading(false);
-
-            /* Original Firebase Code:
-            if (DEMO_MODE) {
-              loginDemoUser("deaf", "goyalvrusha@gmail.com");
-              navigate("/deaf");
-              setLoading(false);
-              return;
-            }
-            try {
-              const userCredential = await signInWithEmailAndPassword(auth, "goyalvrusha@gmail.com", "vrusha123");
-              const idToken = await userCredential.user.getIdToken();
-              try {
-                await API.post("/login", { idToken });
-              } catch {}
-              navigate("/deaf");
-            } catch (err) {
-              setError(err.message || "Invalid credentials. Please try again.");
-            } finally {
-              setLoading(false);
-            }
-            */
-          }}
-          className="w-full py-3.5 bg-emerald-50 border-2 border-emerald-500 text-emerald-700 hover:bg-emerald-100 active:scale-[0.98] font-bold rounded-2xl flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer"
-        >
-          <span className="material-symbols-outlined text-base">flash_on</span>
-          <span>Quick Sign In as Vrusha</span>
-        </button>
-
-        <div className="text-center text-xs text-on-surface-variant border-t border-outline-variant/20 pt-4">
-          Don't have an account?{" "}
+        <div className="mt-6 text-center text-xs text-on-surface-variant">
+          <span>Don't have an account? </span>
           <button
+            type="button"
             onClick={() => navigate("/deaf/signup")}
-            className="text-primary font-semibold hover:underline cursor-pointer"
+            className="text-primary font-bold hover:underline cursor-pointer"
           >
             Create Account
           </button>

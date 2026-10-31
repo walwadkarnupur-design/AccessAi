@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../services/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
 import API from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
@@ -40,7 +38,7 @@ const MOTOR_STEP_SIGNUP_CONFIRM_LAST_NAME = "SIGNUP_CONFIRM_LAST_NAME";
 
 export default function MotorSignup() {
   const navigate = useNavigate();
-  const { loginDemoUser, DEMO_MODE } = useAuth();
+  const { signUp, loginDemoUser, DEMO_MODE } = useAuth();
   const { t, language } = useLanguage();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -476,23 +474,17 @@ export default function MotorSignup() {
       return;
     }
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await userCredential.user.getIdToken();
-      try {
-        await API.post("/register", {
-          name: `${firstName} ${lastName}`.trim(),
-          firstName,
-          lastName,
-          email,
-          idToken,
-          phone,
-          age: parseInt(age) || null,
-          gender,
-          disabilityType: accessibilityPref
-        });
-      } catch (err) {
-        console.error("Manual signup error", err);
-      }
+      await signUp({
+        name: `${firstName} ${lastName}`.trim(),
+        firstName,
+        lastName,
+        email,
+        password,
+        phone,
+        age: parseInt(age) || null,
+        gender,
+        disabilityType: accessibilityPref || "motor"
+      });
       navigate(`/${accessibilityPref}`);
     } catch (err) {
       setError(err.message || "Registration failed. Try again.");
@@ -523,23 +515,17 @@ export default function MotorSignup() {
       if (data.password !== data.confirmPassword) {
         throw new Error(t("err_passwords_match", "Passwords do not match."));
       }
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      const idToken = await userCredential.user.getIdToken();
-      try {
-        await API.post("/register", {
-          name: `${data.firstName} ${data.lastName}`.trim(),
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          idToken,
-          phone: data.phone,
-          age: parseInt(data.age) || null,
-          gender: data.gender,
-          disabilityType: data.accessibilityPref
-        });
-      } catch (err) {
-        console.error(err);
-      }
+      await signUp({
+        name: `${data.firstName} ${data.lastName}`.trim(),
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        password: data.password,
+        phone: data.phone,
+        age: parseInt(data.age) || null,
+        gender: data.gender,
+        disabilityType: data.accessibilityPref || "motor"
+      });
       speakText(t("prompt_registration_success"), () => {
         navigate(`/${data.accessibilityPref}`);
       });

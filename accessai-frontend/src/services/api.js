@@ -1,17 +1,16 @@
 import axios from "axios";
-import { auth } from "./firebase";
-
+import { supabase } from "./supabase";
 
 const API = axios.create({
   baseURL: process.env.REACT_APP_API_URL || "http://localhost:5000",
 });
 
-// Attach Firebase ID token or demo token to every request automatically
+// Attach Supabase access token or demo token to every request automatically
 API.interceptors.request.use(async (config) => {
   try {
-    const user = auth.currentUser;
-    if (user) {
-      const token = await user.getIdToken();
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
       // Check stored demo auth

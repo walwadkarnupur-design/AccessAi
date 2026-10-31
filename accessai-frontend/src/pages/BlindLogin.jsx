@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../services/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import API from "../services/api";
 import VoiceEmailInput from "../components/VoiceEmailInput";
 import { useVoiceAssistant } from "../hooks/useVoice";
@@ -15,7 +13,7 @@ const BLIND_STEP_PASSWORD_CONFIRM = "PASSWORD_CONFIRM";
 
 export default function BlindLogin() {
   const navigate = useNavigate();
-  const { loginDemoUser, DEMO_MODE } = useAuth();
+  const { signIn, loginDemoUser, DEMO_MODE } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -102,11 +100,7 @@ export default function BlindLogin() {
       return;
     }
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
-      const idToken = await userCredential.user.getIdToken();
-      try {
-        await API.post("/login", { idToken });
-      } catch {}
+      await signIn(credentials.email, credentials.password);
       speakText("Welcome back to AccessAI! Login successful.", () => {
         navigate("/blind");
       });
@@ -196,32 +190,17 @@ export default function BlindLogin() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    
-    // TEMPORARY DEMO MODE BYPASS: Navigate directly to Blind Dashboard
-    loginDemoUser("blind", email);
-    navigate("/blind");
-    setLoading(false);
 
-    /* Original Firebase Code:
-    if (DEMO_MODE) {
-      loginDemoUser("blind", email);
-      navigate("/blind");
-      setLoading(false);
-      return;
-    }
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const idToken = await userCredential.user.getIdToken();
-      try {
-        await API.post("/login", { idToken });
-      } catch {}
+      await signIn(email, password);
       navigate("/blind");
     } catch (err) {
       setError(err.message || "Invalid credentials. Please try again.");
     } finally {
       setLoading(false);
     }
-    */
+
+    
   };
 
   return (
@@ -348,26 +327,7 @@ export default function BlindLogin() {
               navigate("/blind");
               setLoading(false);
 
-              /* Original Firebase Code:
-              if (DEMO_MODE) {
-                loginDemoUser("blind", "amanhalkude7750+blind@gmail.com");
-                navigate("/blind");
-                setLoading(false);
-                return;
-              }
-              try {
-                const userCredential = await signInWithEmailAndPassword(auth, "amanhalkude7750+blind@gmail.com", "aman123");
-                const idToken = await userCredential.user.getIdToken();
-                try {
-                  await API.post("/login", { idToken });
-                } catch {}
-                navigate("/blind");
-              } catch (err) {
-                setError(err.message || "Invalid credentials. Please try again.");
-              } finally {
-                setLoading(false);
-              }
-              */
+              
             });
           }}
           className="w-full py-3.5 bg-emerald-50 border-2 border-emerald-500 text-emerald-700 hover:bg-emerald-100 active:scale-[0.98] font-bold rounded-2xl flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer"

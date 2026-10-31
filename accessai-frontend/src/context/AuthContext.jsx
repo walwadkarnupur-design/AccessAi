@@ -1,12 +1,11 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "../services/firebase";
+import { supabase } from "../services/supabase";
 import API from "../services/api";
 
 const AuthContext = createContext();
 const DEMO_AUTH_STORAGE_KEY = "accessai_demo_auth";
 
-export const DEMO_MODE = true; // Set to true to bypass Firebase auth for development/demo
+export const DEMO_MODE = false; // Real Supabase Auth enabled by default
 
 const makeDemoUser = (type, email = "", customName = "") => {
   let mockEmail = email;
@@ -18,7 +17,7 @@ const makeDemoUser = (type, email = "", customName = "") => {
       if (stored && stored.trim() && !stored.includes("Aaradhya")) {
         mockName = stored.trim();
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   if (!mockName) {
@@ -38,6 +37,7 @@ const makeDemoUser = (type, email = "", customName = "") => {
 
   return {
     uid: `demo-uid-${type}`,
+    id: `demo-uid-${type}`,
     email: mockEmail,
     displayName: mockName,
     emailVerified: true,
@@ -57,78 +57,166 @@ const getStoredDemoAuth = () => {
 
 const persistDemoAuth = (currentUser, currentDisabilityType) => {
   if (typeof window === "undefined") return;
-
   try {
     const payload = {
       user: currentUser ? {
-        uid: currentUser.uid,
+        uid: currentUser.uid || currentUser.id,
+        id: currentUser.uid || currentUser.id,
         email: currentUser.email,
-        displayName: currentUser.displayName,
-        emailVerified: currentUser.emailVerified
+        displayName: currentUser.displayName || currentUser.user_metadata?.name,
+        emailVerified: true
       } : null,
       disabilityType: currentDisabilityType || null
     };
-
     window.localStorage.setItem(DEMO_AUTH_STORAGE_KEY, JSON.stringify(payload));
-  } catch (err) {
-    // ignore storage errors in restricted environments
-  }
+  } catch (err) { }
 };
 
 export function AuthProvider({ children }) {
-  const [user, setUser]                     = useState(null);
+  const [user, setUser] = useState(null);
   const [disabilityType, setDisabilityType] = useState(null);
-  const [loading, setLoading]               = useState(true);
+  const [loading, setLoading] = useState(true);
 
+  // Synchronize Supabase Auth state
   useEffect(() => {
-    if (DEMO_MODE) {
-      const storedAuth = getStoredDemoAuth();
-
-      if (storedAuth && storedAuth.user && storedAuth.disabilityType) {
-        setUser({ ...storedAuth.user, getIdToken: async () => "demo-token-abcde" });
-        setDisabilityType(storedAuth.disabilityType);
-      } else {
-        let defaultName = "Vrusha Goyal";
-        if (typeof window !== "undefined") {
-          const s = window.localStorage.getItem("accessai_student_name");
-          if (s && s.trim() && !s.includes("Aaradhya")) defaultName = s.trim();
-        }
+    // 1. Check active Supabase session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const sbUser = session.user;
+        const profileName = sbUser.user_metadata?.name || sbUser.email.split("@")[0];
+        const mode = sbUser.user_metadata?.disability_type || sbUser.user_metadata?.disabilityType || "deaf";
+        
         setUser({
-          uid: "demo-uid-default",
-          email: "demo@accessai.com",
-          displayName: defaultName,
-          emailVerified: true,
-          getIdToken: async () => "demo-token-abcde"
+          uid: sbUser.id,
+          id: sbUser.id,
+          email: sbUser.email,
+          displayName: profileName,
+          user_metadata: sbUser.user_metadata,
+          getIdToken: async () => session.access_token
         });
-        setDisabilityType(null);
+        setDisabilityType(mode);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("accessai_student_name", profileName);
+        }
+      } else {
+        // Fallback to stored local session if present
+        const stored = getStoredDemoAuth();
+        if (stored?.user && stored?.disabilityType) {
+          setUser(stored.user);
+          setDisabilityType(stored.disabilityType);
+        }
       }
       setLoading(false);
-      return;
-    }
+    });
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        try {
-          const res = await API.get(`/users/${firebaseUser.uid}`);
-          setDisabilityType(res.data.user.disabilityType);
-        } catch (e) {
-          console.error("Could not load user profile:", e);
+    // 2. Listen to Supabase Auth state changes (sign in, sign out, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const sbUser = session.user;
+        const profileName = sbUser.user_metadata?.name || sbUser.email.split("@")[0];
+        const mode = sbUser.user_metadata?.disability_type || sbUser.user_metadata?.disabilityType || "deaf";
+
+        setUser({
+          uid: sbUser.id,
+          id: sbUser.id,
+          email: sbUser.email,
+          displayName: profileName,
+          user_metadata: sbUser.user_metadata,
+          getIdToken: async () => session.access_token
+        });
+        setDisabilityType(mode);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("accessai_student_name", profileName);
         }
-      } else {
+      } else if (event === "SIGNED_OUT") {
         setUser(null);
         setDisabilityType(null);
       }
       setLoading(false);
     });
-    return unsubscribe;
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
 
-  useEffect(() => {
-    if (DEMO_MODE) {
-      persistDemoAuth(user, disabilityType);
+  // Real Supabase Sign Up
+  const signUp = async ({ email, password, name, disabilityType: mode, phone, age, gender }) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: name?.trim(),
+            full_name: name?.trim(),
+            disability_type: mode,
+            disabilityType: mode,
+            phone: phone?.trim(),
+            age: age || null,
+            gender: gender || null
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
+        const profileName = name || email.split("@")[0];
+        const formattedUser = {
+          uid: data.user.id,
+          id: data.user.id,
+          email: data.user.email,
+          displayName: profileName,
+          getIdToken: async () => data.session?.access_token || "supabase-session"
+        };
+        setUser(formattedUser);
+        setDisabilityType(mode);
+        persistDemoAuth(formattedUser, mode);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("accessai_student_name", profileName);
+        }
+      }
+      return data;
+    } finally {
+      setLoading(false);
     }
-  }, [user, disabilityType]);
+  };
+
+  // Real Supabase Sign In
+  const signIn = async (email, password) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
+        const profileName = data.user.user_metadata?.name || data.user.email.split("@")[0];
+        const mode = data.user.user_metadata?.disability_type || data.user.user_metadata?.disabilityType || "deaf";
+        const formattedUser = {
+          uid: data.user.id,
+          id: data.user.id,
+          email: data.user.email,
+          displayName: profileName,
+          getIdToken: async () => data.session?.access_token || ""
+        };
+        setUser(formattedUser);
+        setDisabilityType(mode);
+        persistDemoAuth(formattedUser, mode);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("accessai_student_name", profileName);
+        }
+      }
+      return data;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loginDemoUser = (type, email = "", customName = "") => {
     const demoUser = makeDemoUser(type, email, customName);
@@ -137,6 +225,7 @@ export function AuthProvider({ children }) {
     }
     setUser(demoUser);
     setDisabilityType(type);
+    persistDemoAuth(demoUser, type);
   };
 
   const loginGuestUser = (name = "Vrusha Goyal", type = "deaf") => {
@@ -147,6 +236,7 @@ export function AuthProvider({ children }) {
     }
     const guestUser = {
       uid: `guest-uid-${type}-${Date.now().toString(36)}`,
+      id: `guest-uid-${type}-${Date.now().toString(36)}`,
       email: `${cleanName.toLowerCase().replace(/\s+/g, "")}@guest.accessai.com`,
       displayName: cleanName,
       emailVerified: true,
@@ -154,6 +244,7 @@ export function AuthProvider({ children }) {
     };
     setUser(guestUser);
     setDisabilityType(type);
+    persistDemoAuth(guestUser, type);
   };
 
   const updateUserName = (name) => {
@@ -172,13 +263,24 @@ export function AuthProvider({ children }) {
       window.localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
       window.localStorage.removeItem("accessai_last_route");
     }
-    if (!DEMO_MODE) {
-      await signOut(auth);
-    }
+    try {
+      await supabase.auth.signOut();
+    } catch (e) { }
   };
 
   return (
-    <AuthContext.Provider value={{ user, disabilityType, loading, logout, loginDemoUser, loginGuestUser, updateUserName, DEMO_MODE }}>
+    <AuthContext.Provider value={{
+      user,
+      disabilityType,
+      loading,
+      logout,
+      signUp,
+      signIn,
+      loginDemoUser,
+      loginGuestUser,
+      updateUserName,
+      DEMO_MODE
+    }}>
       {!loading && children}
     </AuthContext.Provider>
   );

@@ -4,13 +4,13 @@
   "private": true,
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.35",
+    "@supabase/supabase-js": "^2.118.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.17.0",
     "ethers": "^6.17.0",
-    "firebase": "^12.14.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.17.0",
@@ -21,7 +21,7 @@
   "scripts": {
     "start": "react-scripts start",
     "dev": "react-scripts start",
-    "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
+    "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
