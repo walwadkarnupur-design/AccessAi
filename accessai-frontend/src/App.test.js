@@ -5,10 +5,10 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-test('renders AccessAI app', () => {
+test('renders AccessAI app', async () => {
   render(<App />);
-  const titleElement = screen.getByText(/Welcome to AccessAI/i);
-  expect(titleElement).toBeInTheDocument();
+  const selectModeBtn = await screen.findByText(/Select Mode/i);
+  expect(selectModeBtn).toBeInTheDocument();
 });
 
 test('persists and restores the last route', () => {
