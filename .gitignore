@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+accessai-frontend/node_modules/
+
+# Production builds
+build/
+dist/
+accessai-frontend/build/
+accessai-frontend/dist/
+
+# Environment files
+.env
+*.env
+.env.local
+.env.*.local
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
