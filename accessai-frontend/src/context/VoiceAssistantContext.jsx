@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import { useLanguage } from "./LanguageContext";
+import { AuthContext } from "./AuthContext";
 import { transliterateIndicToEnglish, isIndic } from "../utils/indicTransliterate";
 
 const VoiceAssistantContext = createContext(null);
@@ -77,6 +78,8 @@ function isActiveSpeechEcho(heardText, lastSpokenText) {
 }
 
 export function VoiceAssistantProvider({ children }) {
+  const auth = useContext(AuthContext);
+  const isTeacher = Boolean(auth?.role === "teacher" || auth?.user?.role === "teacher" || auth?.user?.user_metadata?.role === "teacher");
   const { speechLang } = useLanguage();
   const [context, setContext] = useState("NONE");
   const [speechBubble, setSpeechBubble] = useState("");
@@ -156,6 +159,7 @@ export function VoiceAssistantProvider({ children }) {
 
   // Safe start wrapper preventing duplicate recognition instances or InvalidStateErrors
   const safeStartRecognition = useCallback(() => {
+    if (isTeacher) return;
     if (isUnmountedRef.current) return;
     if (hasPermissionErrorRef.current) return;
     if (!voiceActiveRef.current) return;
@@ -216,6 +220,7 @@ export function VoiceAssistantProvider({ children }) {
 
   // Text-To-Speech engine with barge-in support and cancellation safety
   const speak = useCallback((text, onEndCallback) => {
+    if (isTeacher) return;
     if (typeof window === "undefined" || !window.speechSynthesis) {
       if (onEndCallback) onEndCallback();
       return;
@@ -396,6 +401,7 @@ export function VoiceAssistantProvider({ children }) {
   }, [cancelSpeech, safeStartRecognition]);
 
   const registerContext = useCallback((contextName, handler, active = true, options = {}) => {
+    if (isTeacher) return () => {};
     console.log(`[VoiceAssistant] Context registering: ${contextName} (active=${active})`);
     setContext(contextName);
 
@@ -420,6 +426,13 @@ export function VoiceAssistantProvider({ children }) {
   // Initial SpeechRecognition Setup (runs when spellingMode changes)
   useEffect(() => {
     isUnmountedRef.current = false;
+    if (isTeacher) {
+      setListening(false);
+      try { if (recognitionRef.current) recognitionRef.current.stop(); } catch(err) {}
+      cancelSpeech();
+      return;
+    }
+
     const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
     if (!SR) {
       console.warn("[VoiceAssistant] Speech Recognition not supported in this browser.");
@@ -583,7 +596,7 @@ export function VoiceAssistantProvider({ children }) {
       } catch (err) {}
       cancelSpeech();
     };
-  }, [spellingMode, safeStartRecognition, cancelSpeech, handleStop, handleWait, handleResume]);
+  }, [spellingMode, safeStartRecognition, cancelSpeech, handleStop, handleWait, handleResume, isTeacher]);
 
   return (
     <VoiceAssistantContext.Provider value={{
@@ -604,7 +617,8 @@ export function VoiceAssistantProvider({ children }) {
       agentState,
       setAgentState,
       spellingMode,
-      setSpellingMode
+      setSpellingMode,
+      isTeacher
     }}>
       {children}
     </VoiceAssistantContext.Provider>

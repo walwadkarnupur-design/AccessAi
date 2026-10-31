@@ -23,3 +23,16 @@ accessai-frontend/dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Python & Virtual Environments
+venv/
+backend/venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdf
+backend/serviceAccountKey.json
+serviceAccountKey.json
+backend/generated_certificates/
+backend/multimode_test_results.json

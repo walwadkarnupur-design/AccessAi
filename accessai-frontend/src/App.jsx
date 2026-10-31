@@ -13,6 +13,9 @@ import MotorLogin     from "./pages/MotorLogin";
 import MotorSignup    from "./pages/MotorSignup";
 import VerifyCertificatePage from "./pages/VerifyCertificatePage";
 import DeafMeetingRoom from "./pages/DeafMeetingRoom";
+import TeacherLogin from "./pages/TeacherLogin";
+import TeacherDashboard from "./pages/TeacherDashboard";
+import TeacherMeetingRoom from "./pages/TeacherMeetingRoom";
 
 import { VoiceAssistantProvider } from "./context/VoiceAssistantContext";
 import { LanguageProvider } from "./context/LanguageContext";
@@ -51,16 +54,43 @@ function RoutePersistence() {
   return null;
 }
 
-// Protects /deaf /blind /motor — redirects to login if not authenticated
+// Protects /deaf /blind /motor — redirects to login if not authenticated or if user is a teacher
 function ProtectedRoute({ children, requiredMode }) {
-  const { user, disabilityType } = useAuth();
+  const { user, role, disabilityType } = useAuth();
   
-  if (!user || !disabilityType) {
+  if (!user) {
     return <Navigate to={`/${requiredMode}/login`} replace />;
   }
+
+  const isTeacher = role === "teacher" || user?.role === "teacher" || user?.user_metadata?.role === "teacher";
+  if (isTeacher) {
+    return <Navigate to="/teacher" replace />;
+  }
+
+  if (!disabilityType) {
+    return <Navigate to={`/${requiredMode}/login`} replace />;
+  }
+
   if (disabilityType !== requiredMode) {
     return <Navigate to={`/${disabilityType}`} replace />;
   }
+  return children;
+}
+
+// Protects /teacher routes — ensures only authenticated teachers can access
+function TeacherProtectedRoute({ children }) {
+  const { user, role } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/teacher/login" replace />;
+  }
+
+  const isTeacher = role === "teacher" || user?.role === "teacher" || user?.user_metadata?.role === "teacher";
+  if (!isTeacher) {
+    // Student attempted to access teacher routes - redirect safely away
+    return <Navigate to="/" replace />;
+  }
+
   return children;
 }
 
@@ -73,7 +103,7 @@ function AuthRedirect() {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Landing — always shows the 3 accessibility modes (Blind, Deaf, Motor) */}
+      {/* Landing — language, role, and accessibility mode flows */}
       <Route path="/" element={<Landing />} />
       <Route path="/verify" element={<VerifyCertificatePage />} />
 
@@ -81,7 +111,34 @@ function AppRoutes() {
       <Route path="/meeting" element={<DeafMeetingRoom />} />
       <Route path="/deaf/meeting" element={<DeafMeetingRoom />} />
 
-      {/* Mode dashboards — protected */}
+      {/* Teacher dedicated authentication, workspace, and video meeting studio */}
+      <Route path="/teacher/login" element={<TeacherLogin />} />
+      <Route
+        path="/teacher/meeting/:roomId"
+        element={
+          <TeacherProtectedRoute>
+            <TeacherMeetingRoom />
+          </TeacherProtectedRoute>
+        }
+      />
+      <Route
+        path="/teacher/meeting"
+        element={
+          <TeacherProtectedRoute>
+            <TeacherMeetingRoom />
+          </TeacherProtectedRoute>
+        }
+      />
+      <Route
+        path="/teacher/*"
+        element={
+          <TeacherProtectedRoute>
+            <TeacherDashboard />
+          </TeacherProtectedRoute>
+        }
+      />
+
+      {/* Student mode dashboards — protected */}
       <Route path="/deaf/*"  element={<ProtectedRoute requiredMode="deaf"><DeafDashboard /></ProtectedRoute>} />
       <Route path="/blind/*" element={<ProtectedRoute requiredMode="blind"><BlindDashboard /></ProtectedRoute>} />
       <Route path="/motor/*" element={<ProtectedRoute requiredMode="motor"><MotorDashboard /></ProtectedRoute>} />
@@ -94,7 +151,7 @@ function AppRoutes() {
       <Route path="/motor/login" element={<MotorLogin />} />
       <Route path="/motor/signup" element={<MotorSignup />} />
 
-      {/* Generic login/signup shortcuts — route to mode selection */}
+      {/* Generic login/signup shortcuts — route to landing role/mode selection */}
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="/signin" element={<Navigate to="/" replace />} />
       <Route path="/signup" element={<Navigate to="/" replace />} />

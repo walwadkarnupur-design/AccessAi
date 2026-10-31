@@ -1,10 +1,13 @@
 /**
  * AccessAI Two-Way Accessible Meeting Communication Service
- * Coordinated with Developer 2 (Hearing / Abled Participant Side)
+ * Real-time messaging, WebRTC signaling & dynamic presence bus.
  * 
- * Flow:
- * - Deaf/Mute User -> Sign Language -> Text -> Meeting Broadcast -> Speech (TTS)
- * - Hearing User   -> Speech -> Text -> Meeting Broadcast -> Live Captions
+ * Supports:
+ * - Multi-transport broadcast: BroadcastChannel (cross-tab) + localStorage fallback + Supabase Realtime
+ * - WebRTC SDP & ICE candidate signaling
+ * - Dynamic participant discovery and presence heartbeats
+ * - Live speech-to-text broadcast (continuous teacher captions)
+ * - Sign language & accessible keyboard chat
  */
 
 import { supabase } from "./supabase";
@@ -15,44 +18,53 @@ export class MeetingChannel {
   constructor(meetingId = "accessai-room-101", currentUser = null) {
     this.meetingId = meetingId;
     this.currentUser = currentUser || {
-      id: `deaf-user-${Date.now().toString(36)}`,
-      name: "Deaf Participant",
-      mode: "deaf_mute"
+      id: `user-${Date.now().toString(36)}`,
+      name: "Participant",
+      mode: "student"
     };
+    this.currentUserId = this.currentUser.id || this.currentUser.uid;
+
     this.subscribers = new Set();
+    this.signalSubscribers = new Set();
     this.participantSubscribers = new Set();
     this.seenMessageIds = new Set();
+
     this.broadcastChannel = null;
     this.supabaseChannel = null;
+    this.storageHandler = null;
+    this.eventSource = null;
+    this.signalingUrl = null;
+    this.pingInterval = null;
 
-    this.participants = [
-      {
-        id: this.currentUser.id,
-        name: this.currentUser.name,
-        mode: "deaf_mute",
-        role: "Deaf/Mute Signer",
-        status: "connected",
-        isSelf: true
-      },
-      {
-        id: "partner-hearing-01",
-        name: "Abled Participant",
-        mode: "hearing",
-        role: "Hearing/Speaker",
-        status: "connected",
-        isSelf: false
-      },
-      {
-        id: "ai-interpreter-relay",
-        name: "AccessAI Relay Bot",
-        mode: "ai_relay",
-        role: "Two-Way AI Interpreter",
-        status: "active",
-        isSelf: false
-      }
-    ];
+    // Active participants mapped by ID
+    this.participantsMap = new Map();
+
+    // Register self
+    const selfParticipant = {
+      id: this.currentUserId,
+      name: this.currentUser.displayName || this.currentUser.name || "Participant",
+      mode: this.currentUser.mode || (this.currentUser.role === "teacher" ? "teacher" : "deaf_mute"),
+      role: this.currentUser.role === "teacher" ? "Teacher / Host" : "Student Participant",
+      status: "connected",
+      isSelf: true,
+      lastSeen: Date.now()
+    };
+    this.participantsMap.set(this.currentUserId, selfParticipant);
 
     this._initChannel();
+
+    // Announce presence after channel mounts
+    setTimeout(() => {
+      this.announcePresence("joined");
+      this.pingParticipants();
+    }, 150);
+
+    // Periodic heartbeat to guarantee peer discovery across devices/reloads
+    if (typeof window !== "undefined") {
+      this.pingInterval = setInterval(() => {
+        this.pingParticipants();
+      }, 4000);
+    }
   }
 
   _initChannel() {
@@ -66,11 +78,11 @@ export class MeetingChannel {
           }
         };
       } catch (err) {
-        console.warn("BroadcastChannel error:", err);
+        console.warn("[MeetingChannel] BroadcastChannel error:", err);
       }
     }
 
-    // 2. Storage event fallback for cross-tab sync
+    // 2. Storage event fallback for cross-window sync
     if (typeof window !== "undefined") {
       this.storageHandler = (event) => {
         if (event.key && event.key.startsWith(STORAGE_PREFIX)) {
@@ -85,7 +97,7 @@ export class MeetingChannel {
       window.addEventListener("storage", this.storageHandler);
     }
 
-    // 3. Supabase Realtime broadcast channel (if Supabase configured)
+    // 3. Supabase Realtime broadcast channel
     try {
       if (supabase && supabase.channel) {
         this.supabaseChannel = supabase
@@ -98,106 +110,143 @@ export class MeetingChannel {
           .subscribe();
       }
     } catch (e) {
-      console.warn("Supabase realtime channel skipped:", e);
+      console.warn("[MeetingChannel] Supabase realtime channel skipped:", e);
+    }
+
+    // 4. Cross-Device Network Transport via SSE Signaling Server
+    if (typeof window !== "undefined") {
+      try {
+        const host = window.location.hostname || "localhost";
+        const port = process.env.REACT_APP_SIGNALING_PORT || 5001;
+        const defaultUrl = `http://${host}:${port}`;
+        const signalingUrl = process.env.REACT_APP_SIGNALING_URL || defaultUrl;
+        this.signalingUrl = signalingUrl;
+
+        if (typeof EventSource !== "undefined") {
+          const sseUrl = `${signalingUrl}/events?room=${encodeURIComponent(this.meetingId)}&userId=${encodeURIComponent(this.currentUserId)}`;
+          this.eventSource = new EventSource(sseUrl);
+          this.eventSource.onopen = () => {
+            this.announcePresence("joined");
+            this.pingParticipants();
+          };
+          this.eventSource.onmessage = (event) => {
+            if (event && event.data) {
+              try {
+                const parsed = JSON.parse(event.data);
+                if (parsed && parsed.messageType === "system_connected") {
+                  this.announcePresence("joined");
+                  this.pingParticipants();
+                } else if (parsed && parsed.messageType) {
+                  this._handleIncoming(parsed);
+                }
+              } catch (e) {}
+            }
+          };
+          this.eventSource.onerror = () => {
+            // Silently fall back to BroadcastChannel and localStorage on same origin
+          };
+        }
+      } catch (err) {
+        console.warn("[MeetingChannel] Network signaling init skipped:", err);
+      }
     }
   }
 
   _handleIncoming(msg) {
     if (!msg || !msg.messageType) return;
-    const key = msg.id || `${msg.timestamp}_${msg.senderId}_${msg.text}`;
+    const key = msg.id || `${msg.timestamp}_${msg.senderId}_${msg.messageType}_${msg.text || ""}`;
     if (this.seenMessageIds.has(key)) return;
     this.seenMessageIds.add(key);
-    if (this.seenMessageIds.size > 200) {
+    if (this.seenMessageIds.size > 250) {
       const first = this.seenMessageIds.values().next().value;
       this.seenMessageIds.delete(first);
     }
+
+    const isFromSelf = msg.senderId === this.currentUserId;
+
+    // 1. WebRTC Signaling Dispatch
+    if (msg.messageType === "webrtc_signal") {
+      if (!isFromSelf) {
+        const isTarget = !msg.targetId || msg.targetId === "broadcast" || msg.targetId === this.currentUserId;
+        if (isTarget) {
+          this.signalSubscribers.forEach((cb) => {
+            try {
+              cb(msg.signal, msg.senderId, msg);
+            } catch (err) {
+              console.error("[MeetingChannel] Signal subscriber error:", err);
+            }
+          });
+        }
+      }
+      return;
+    }
+
+    // 2. Dynamic Presence Handling
+    if (msg.messageType === "presence_announce") {
+      if (!isFromSelf && msg.participant) {
+        this.participantsMap.set(msg.participant.id, {
+          ...msg.participant,
+          isSelf: false,
+          lastSeen: Date.now()
+        });
+        this._notifyParticipants();
+
+        // If newly joined, reply with our own presence pong
+        if (msg.status === "joined") {
+          this.announcePresence("present", msg.senderId);
+        }
+      }
+      return;
+    }
+
+    if (msg.messageType === "presence_ping") {
+      if (!isFromSelf) {
+        this.announcePresence("present", msg.senderId);
+      }
+      return;
+    }
+
+    if (msg.messageType === "presence_leave") {
+      if (!isFromSelf && msg.senderId) {
+        this.participantsMap.delete(msg.senderId);
+        this._notifyParticipants();
+      }
+      return;
+    }
+
+    // 3. Regular meeting messages (chat, speech_to_text, sign_to_text)
     this.subscribers.forEach((callback) => {
       try {
         callback(msg);
       } catch (err) {
-        console.error("Error in meeting message subscriber:", err);
+        console.error("[MeetingChannel] Message subscriber error:", err);
       }
     });
   }
 
-  /**
-   * Broadcasts a sign-to-text message from the Deaf/Mute user
-   */
-  /**
-   * Broadcasts a typed text message from the Deaf/Mute student (No camera or mic needed)
-   */
-  sendTextMessage(text, extra = {}) {
-    if (!text || !text.trim()) return null;
-
-    const message = {
-      id: 'txt-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
-      meetingId: this.meetingId,
-      senderId: this.currentUser.id || this.currentUser.uid,
-      senderName: this.currentUser.displayName || this.currentUser.name || 'Deaf Student',
-      senderMode: 'deaf_mute',
-      messageType: 'text_message',
-      text: text.trim(),
-      timestamp: new Date().toISOString(),
-      ...extra
-    };
-
+  _broadcast(message) {
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage(message);
       } catch (e) {}
     }
 
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_PREFIX + Date.now(), JSON.stringify(message));
-      } catch (e) {}
-    }
-
-    if (this.supabaseChannel) {
-      try {
-        this.supabaseChannel.send({
-          type: 'broadcast',
-          event: 'message',
-          payload: message
-        });
-      } catch (e) {}
-    }
-
-    this._handleIncoming(message);
-    return message;
-  }
-
-  sendSignMessage(text, confidence = 0.95, extra = {}) {
-    if (!text || !text.trim()) return null;
-
-    const message = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      meetingId: this.meetingId,
-      senderId: this.currentUser.id || this.currentUser.uid,
-      senderName: this.currentUser.displayName || this.currentUser.name || "Deaf Participant",
-      senderMode: "deaf_mute",
-      messageType: "sign_to_text",
-      text: text.trim(),
-      confidence: Math.round(confidence * 100) / 100,
-      timestamp: new Date().toISOString(),
-      ...extra
-    };
-
-    // 1. Broadcast locally
-    if (this.broadcastChannel) {
-      try {
-        this.broadcastChannel.postMessage(message);
-      } catch (e) {}
-    }
-
-    // 2. Storage event for cross-window fallback
     if (typeof window !== "undefined") {
       try {
-        localStorage.setItem(`${STORAGE_PREFIX}${Date.now()}`, JSON.stringify(message));
+        localStorage.setItem(`${STORAGE_PREFIX}${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, JSON.stringify(message));
       } catch (e) {}
     }
 
-    // 3. Supabase Realtime
+    if (this.signalingUrl && typeof fetch !== "undefined") {
+      try {
+        fetch(`${this.signalingUrl}/message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(message)
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
     if (this.supabaseChannel) {
       try {
         this.supabaseChannel.send({
@@ -207,19 +256,145 @@ export class MeetingChannel {
         });
       } catch (e) {}
     }
+  }
 
-    // Deliver to local subscribers
+  /**
+   * Broadcasts typed text from participant
+   */
+  sendTextMessage(text, extra = {}) {
+    if (!text || !text.trim()) return null;
+
+    const message = {
+      id: `txt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      meetingId: this.meetingId,
+      senderId: this.currentUserId,
+      senderName: this.currentUser.displayName || this.currentUser.name || "Participant",
+      senderMode: this.currentUser.mode || "deaf_mute",
+      messageType: "text_message",
+      text: text.trim(),
+      timestamp: new Date().toISOString(),
+      ...extra
+    };
+
+    this._broadcast(message);
     this._handleIncoming(message);
     return message;
   }
 
   /**
-   * Simulates an incoming message from Developer 2 (Hearing Participant)
-   * Essential for live demonstration & testing speech-to-text reception!
+   * Broadcasts gesture detection results
+   */
+  sendSignMessage(text, confidence = 0.95, extra = {}) {
+    if (!text || !text.trim()) return null;
+
+    const message = {
+      id: `sgn-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      meetingId: this.meetingId,
+      senderId: this.currentUserId,
+      senderName: this.currentUser.displayName || this.currentUser.name || "Deaf Participant",
+      senderMode: "deaf_mute",
+      messageType: "sign_to_text",
+      text: text.trim(),
+      confidence: Math.round(confidence * 100) / 100,
+      timestamp: new Date().toISOString(),
+      ...extra
+    };
+
+    this._broadcast(message);
+    this._handleIncoming(message);
+    return message;
+  }
+
+  /**
+   * Broadcasts live speech-to-text captions (Teacher speaking)
+   */
+  sendSpeechCaption(text, isFinal = true, extra = {}) {
+    if (!text || !text.trim()) return null;
+
+    const message = {
+      id: `stt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      meetingId: this.meetingId,
+      senderId: this.currentUserId,
+      senderName: this.currentUser.displayName || this.currentUser.name || "Instructor",
+      senderMode: this.currentUser.mode || "teacher",
+      messageType: "speech_to_text",
+      text: text.trim(),
+      isFinal,
+      confidence: 0.98,
+      timestamp: new Date().toISOString(),
+      ...extra
+    };
+
+    this._broadcast(message);
+    this._handleIncoming(message);
+    return message;
+  }
+
+  /**
+   * Transmits WebRTC signaling messages (SDP offer, answer, ICE candidate)
+   */
+  sendSignal(targetId, signalData) {
+    const message = {
+      id: `sig-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      meetingId: this.meetingId,
+      senderId: this.currentUserId,
+      senderName: this.currentUser.displayName || this.currentUser.name || "Participant",
+      targetId: targetId || "broadcast",
+      messageType: "webrtc_signal",
+      signal: signalData,
+      timestamp: new Date().toISOString()
+    };
+
+    this._broadcast(message);
+  }
+
+  /**
+   * Announces or confirms user presence in room
+   */
+  announcePresence(status = "joined", targetId = null) {
+    const myInfo = this.participantsMap.get(this.currentUserId);
+    if (!myInfo) return;
+
+    const message = {
+      id: `prs-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      meetingId: this.meetingId,
+      senderId: this.currentUserId,
+      targetId: targetId || "broadcast",
+      messageType: "presence_announce",
+      status,
+      participant: myInfo,
+      timestamp: new Date().toISOString()
+    };
+
+    this._broadcast(message);
+  }
+
+  pingParticipants() {
+    const message = {
+      id: `png-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      meetingId: this.meetingId,
+      senderId: this.currentUserId,
+      messageType: "presence_ping",
+      timestamp: new Date().toISOString()
+    };
+    this._broadcast(message);
+  }
+
+  _notifyParticipants() {
+    const list = this.getParticipants();
+    this.participantSubscribers.forEach((cb) => {
+      try {
+        cb(list);
+      } catch (e) {}
+    });
+  }
+
+  /**
+   * Simulates an incoming message for testing/demonstration
    */
   simulateHearingResponse(text = "Hello! I can hear your sign language clearly.") {
     const message = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: `sim-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       meetingId: this.meetingId,
       senderId: "partner-hearing-01",
       senderName: "Abled Participant",
@@ -230,12 +405,7 @@ export class MeetingChannel {
       timestamp: new Date().toISOString()
     };
 
-    if (this.broadcastChannel) {
-      try {
-        this.broadcastChannel.postMessage(message);
-      } catch (e) {}
-    }
-
+    this._broadcast(message);
     this._handleIncoming(message);
     return message;
   }
@@ -245,15 +415,63 @@ export class MeetingChannel {
     return () => this.subscribers.delete(callback);
   }
 
+  onSignal(callback) {
+    this.signalSubscribers.add(callback);
+    return () => this.signalSubscribers.delete(callback);
+  }
+
+  onParticipantsChange(callback) {
+    this.participantSubscribers.add(callback);
+    // Emit initial list immediately
+    callback(this.getParticipants());
+    return () => this.participantSubscribers.delete(callback);
+  }
+
   getParticipants() {
-    return [...this.participants];
+    // If only self, also supply the relay bot for accessibility status indicator
+    const list = Array.from(this.participantsMap.values());
+    const hasRelay = list.some((p) => p.id === "ai-interpreter-relay");
+    if (!hasRelay) {
+      list.push({
+        id: "ai-interpreter-relay",
+        name: "AccessAI Relay Bot",
+        mode: "ai_relay",
+        role: "Two-Way AI Interpreter",
+        status: "active",
+        isSelf: false
+      });
+    }
+    return list;
   }
 
   destroy() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+
+    // Broadcast leave event
+    try {
+      const leaveMsg = {
+        id: `lev-${Date.now()}`,
+        meetingId: this.meetingId,
+        senderId: this.currentUserId,
+        messageType: "presence_leave",
+        timestamp: new Date().toISOString()
+      };
+      this._broadcast(leaveMsg);
+    } catch (e) {}
+
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.close();
       } catch (e) {}
+    }
+    if (this.eventSource) {
+      try {
+        this.eventSource.close();
+      } catch (e) {}
+      this.eventSource = null;
     }
     if (this.storageHandler && typeof window !== "undefined") {
       window.removeEventListener("storage", this.storageHandler);
@@ -264,8 +482,9 @@ export class MeetingChannel {
       } catch (e) {}
     }
     this.subscribers.clear();
+    this.signalSubscribers.clear();
+    this.participantSubscribers.clear();
   }
 }
 
 export default MeetingChannel;
-
