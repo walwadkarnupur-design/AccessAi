@@ -12,6 +12,7 @@ import BlindSignup    from "./pages/BlindSignup";
 import MotorLogin     from "./pages/MotorLogin";
 import MotorSignup    from "./pages/MotorSignup";
 import VerifyCertificatePage from "./pages/VerifyCertificatePage";
+import DeafMeetingRoom from "./pages/DeafMeetingRoom";
 
 import { VoiceAssistantProvider } from "./context/VoiceAssistantContext";
 import { LanguageProvider } from "./context/LanguageContext";
@@ -76,6 +77,10 @@ function AppRoutes() {
       <Route path="/" element={<Landing />} />
       <Route path="/verify" element={<VerifyCertificatePage />} />
 
+      {/* Accessible Two-Way Meeting Hub */}
+      <Route path="/meeting" element={<DeafMeetingRoom />} />
+      <Route path="/deaf/meeting" element={<DeafMeetingRoom />} />
+
       {/* Mode dashboards — protected */}
       <Route path="/deaf/*"  element={<ProtectedRoute requiredMode="deaf"><DeafDashboard /></ProtectedRoute>} />
       <Route path="/blind/*" element={<ProtectedRoute requiredMode="blind"><BlindDashboard /></ProtectedRoute>} />
@@ -118,4 +123,4 @@ export default function App() {
       </WalletProvider>
     </AuthProvider>
   );
-}
+}
