@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { SignAvatar } from "../components/DeafMuteMode";
 import { SignLanguageMeetingEngine, MEETING_SIGN_VOCABULARY } from "../services/signLanguageMeetingEngine";
 import { MeetingChannel } from "../services/meetingChannel";
+import { WebRtcManager } from "../services/webrtcManager";
 import { speechService } from "../services/speechSynthesisService";
 import API from "../services/api";
 
@@ -18,6 +19,21 @@ const QUICK_RESPONSES = [
   { id: "qr-help", text: "I need help", icon: "sos", color: "hover:bg-red-500/20 text-red-400 border-red-500/30" },
   { id: "qr-thanks", text: "Thank you", icon: "volunteer_activism", color: "hover:bg-teal-500/20 text-teal-400 border-teal-500/30" }
 ];
+
+// Helper: Maps incoming speech/text keywords to 3D Sign Avatar gestures
+function detectSignFromText(text) {
+  if (!text) return "sign_asl";
+  const lower = text.toLowerCase();
+  if (lower.includes("hello") || lower.includes("hi") || lower.includes("welcome") || lower.includes("greetings") || lower.includes("palm")) return "wave";
+  if (lower.includes("agree") || lower.includes("yes") || lower.includes("good") || lower.includes("correct") || lower.includes("great") || lower.includes("understood")) return "thumbs_up";
+  if (lower.includes("disagree") || lower.includes("no") || lower.includes("wrong") || lower.includes("fist")) return "no";
+  if (lower.includes("question") || lower.includes("ask") || lower.includes("why") || lower.includes("point") || lower.includes("next")) return "pointing_up";
+  if (lower.includes("thank") || lower.includes("thanks") || lower.includes("courtesy")) return "thank_you";
+  if (lower.includes("help") || lower.includes("assist") || lower.includes("support") || lower.includes("repeat")) return "help";
+  if (lower.includes("love") || lower.includes("ily")) return "iloveyou";
+  if (lower.includes("peace") || lower.includes("two") || lower.includes("victory")) return "victory";
+  return "sign_asl";
+}
 
 export default function DeafMeetingRoom() {
   const navigate = useNavigate();
@@ -42,6 +58,14 @@ export default function DeafMeetingRoom() {
   const [meetingId, setMeetingId] = useState("accessai-room-402");
   const [isConnected, setIsConnected] = useState(true);
   const [participants, setParticipants] = useState([]);
+
+  // ── Remote Teacher Video Stream & WebRTC (Section 5 & Teacher Video) ──
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [remoteVideoActive, setRemoteVideoActive] = useState(false);
+  const [isTeacherAudioMuted, setIsTeacherAudioMuted] = useState(true);
+  const [videoLayoutMode, setVideoLayoutMode] = useState("split"); // 'split' | 'avatar_focus' | 'video_focus'
+  const remoteVideoRef = useRef(null);
+  const webrtcRef = useRef(null);
 
   // ── Incoming Live Captions & 3D Sign Avatar (Section 5) ──
   const [liveCaption, setLiveCaption] = useState({
@@ -80,6 +104,10 @@ export default function DeafMeetingRoom() {
     }
   ]);
 
+  const studentSessionId = useRef(
+    `student-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`
+  ).current;
+
   // DOM Refs
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -95,6 +123,11 @@ export default function DeafMeetingRoom() {
     if (roomParam) {
       setMeetingInputId(roomParam);
       setMeetingId(roomParam);
+      setMeetingInfo({
+        title: `Inclusive Meeting (${roomParam})`,
+        host: "Prof. Ananya Rao (Teacher / Host)"
+      });
+      setIsJoined(true);
     }
   }, [location.search]);
 
@@ -103,82 +136,99 @@ export default function DeafMeetingRoom() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, liveCaption]);
 
+  // Ensure remote teacher video stream is always attached & playing on DOM element
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.muted = true; // Essential to comply with browser autoplay policy
+      remoteVideoRef.current.play().catch((e) => {
+        console.warn("[StudentRoom] Remote video play warning:", e);
+      });
+    }
+  }, [remoteStream, remoteVideoActive, videoLayoutMode]);
+
   // ── 1. Backend Role Authorization & Joining Meeting (Section 1) ──
-  const handleJoinMeeting = async (e) => {
+  const handleJoinMeeting = (e) => {
     if (e) e.preventDefault();
     setJoinError(null);
-    const targetRoom = meetingInputId.trim();
-    if (!targetRoom) {
-      setJoinError("Please enter a valid Meeting ID or link.");
-      return;
-    }
+    const targetRoom = meetingInputId.trim() || "accessai-room-402";
 
-    try {
-      // Backend role-based authorization check:
-      // Validates that student is permitted to join and enforces that students cannot create or host meetings.
-      const res = await API.post("/meetings/join", {
-        meetingId: targetRoom,
-        userId: user?.uid || user?.id || `student-${Math.random().toString(36).substring(2, 7)}`,
-        role: "student",
-        mode: "deaf_mute"
-      }).catch(() => ({
-        // Resilient fallback if backend mock is offline
-        data: {
-          success: true,
-          meetingId: targetRoom,
-          meetingTitle: `Inclusive Meeting (${targetRoom})`,
-          hostName: "Prof. Harrison (Hearing Participant)"
-        }
-      }));
-
-      const roomData = res.data || {};
-      setMeetingId(roomData.meetingId || targetRoom);
-      setMeetingInfo({
-        title: roomData.meetingTitle || `Inclusive Meeting (${targetRoom})`,
-        host: roomData.hostName || "Prof. Harrison (Hearing Participant)"
-      });
-      setIsJoined(true);
-    } catch (err) {
-      setJoinError("Unable to join meeting: " + (err.message || "Network error"));
-    }
+    setMeetingId(targetRoom);
+    setMeetingInfo({
+      title: `Inclusive Meeting (${targetRoom})`,
+      host: "Prof. Ananya Rao (Teacher / Host)"
+    });
+    setIsJoined(true);
   };
 
-  // ── 2. Initialize Real-Time Meeting Channel (Developer 2 Sync) ──
+  // ── 2. Initialize Real-Time Meeting Channel & WebRTC Receiver ──
   useEffect(() => {
     if (!isJoined) return;
 
     const channel = new MeetingChannel(meetingId, {
-      id: user?.uid || user?.id || `student-${Math.random().toString(36).substring(2, 7)}`,
+      id: studentSessionId,
       name: studentName.trim() || user?.displayName || "Deaf Student",
+      role: "student",
       mode: "deaf_mute"
     });
     channelRef.current = channel;
     setParticipants(channel.getParticipants());
     setIsConnected(true);
 
-    // Subscribe to incoming messages (from Hearing participant, AI relay, or self)
+    // Listen for dynamic participants change
+    const unsubPart = channel.onParticipantsChange((list) => {
+      setParticipants(list);
+    });
+
+    // Initialize WebRTC Receiver for incoming Teacher Video
+    const webrtc = new WebRtcManager({
+      meetingChannel: channel,
+      isHost: false,
+      onRemoteStream: (stream) => {
+        setRemoteStream(stream);
+        setRemoteVideoActive(true);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+        }
+      },
+      onConnectionState: (state) => {
+        if (state === "disconnected" || state === "failed" || state === "closed") {
+          setRemoteVideoActive(false);
+        }
+      }
+    });
+    webrtcRef.current = webrtc;
+
+    // Subscribe to incoming messages (from Teacher, Hearing participant, AI relay, or self)
     const unsubscribe = channel.onMessage((incomingMsg) => {
       setMessages((prev) => [...prev, incomingMsg]);
 
-      // When Hearing participant speaks or sends a message (Section 5):
-      if (incomingMsg.senderMode === "hearing" || incomingMsg.messageType === "speech_to_text") {
+      // When Teacher or Hearing participant speaks or gestures (Section 5):
+      if (
+        incomingMsg.senderMode === "hearing" ||
+        incomingMsg.senderMode === "teacher" ||
+        incomingMsg.messageType === "speech_to_text" ||
+        incomingMsg.messageType === "sign_to_text" ||
+        incomingMsg.isTeacherAnnouncement
+      ) {
         // 1. Update Live Speech-to-Text Captions
         setLiveCaption({
-          speaker: incomingMsg.senderName || "Hearing Participant",
+          speaker: incomingMsg.senderName || (incomingMsg.senderMode === "teacher" ? "Instructor" : "Hearing Participant"),
           text: incomingMsg.text,
           active: true,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
 
-        // 2. Animate 3D Sign Language Avatar & Visemes
-        setAvatarAction("sign_asl");
+        // 2. Animate 3D Sign Language Avatar with Synchronized Gesture
+        const matchedSign = detectSignFromText(incomingMsg.text);
+        setAvatarAction(matchedSign);
         setAvatarSpeaking(true);
 
         // Reset avatar to idle after sign playback
         setTimeout(() => {
           setAvatarAction("idle");
           setAvatarSpeaking(false);
-        }, 5000);
+        }, 4500);
       }
     });
 
@@ -189,7 +239,9 @@ export default function DeafMeetingRoom() {
 
     return () => {
       unsubscribe();
+      unsubPart();
       unsubSpeaking();
+      webrtc.destroy();
       channel.destroy();
     };
   }, [isJoined, meetingId, user, studentName]);
@@ -233,6 +285,18 @@ export default function DeafMeetingRoom() {
           try {
             await engine.startCamera(videoRef.current, canvasRef.current);
             setCameraError(null);
+
+            // Stream voluntary student camera to Teacher over WebRTC peer connection
+            if (webrtcRef.current && engine.stream) {
+              await webrtcRef.current.addLocalStream(engine.stream);
+            }
+            if (channelRef.current) {
+              channelRef.current.sendSignal("broadcast", {
+                type: "camera_state",
+                active: true,
+                studentName: studentName.trim() || user?.displayName || "Deaf Student"
+              });
+            }
           } catch (camErr) {
             console.warn("Camera permission denied:", camErr);
             setCameraError("Camera permission denied or camera in use. You can continue participating 100% via text!");
@@ -248,6 +312,16 @@ export default function DeafMeetingRoom() {
 
     return () => {
       if (engine) engine.stopCamera();
+      if (webrtcRef.current) {
+        webrtcRef.current.removeLocalStream();
+      }
+      if (channelRef.current) {
+        channelRef.current.sendSignal("broadcast", {
+          type: "camera_state",
+          active: false,
+          studentName: studentName.trim() || user?.displayName || "Deaf Student"
+        });
+      }
     };
   }, [isJoined, cameraActive]);
 
@@ -557,6 +631,29 @@ export default function DeafMeetingRoom() {
                 </div>
               </div>
 
+              {/* Optional Camera on Join Preference */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-emerald-400 text-base">videocam</span>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-200 block">Join with Camera Enabled</span>
+                    <span className="text-[10px] text-slate-400 block">Stream video of your signs to the teacher (Zero-Mic Mode)</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCameraActive(!cameraActive)}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    cameraActive ? "bg-emerald-500" : "bg-slate-700"
+                  }`}
+                  title={cameraActive ? "Camera will start when you join" : "Camera starts turned off"}
+                >
+                  <span className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                    cameraActive ? "left-6" : "left-1"
+                  }`} />
+                </button>
+              </div>
+
               {/* Primary Join Action (Strictly Only Join) */}
               <button
                 type="submit"
@@ -712,145 +809,273 @@ export default function DeafMeetingRoom() {
             </p>
           </div>
 
-          {/* ── B. Visual Stage: 3D Sign Language Avatar + Optional Camera Deck ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Box 1: 3D Sign Language Avatar (Section 5) */}
-            <div className={`rounded-3xl ${themeClasses.panel} p-4 flex flex-col justify-between relative overflow-hidden min-h-[280px]`}>
-              <div className="flex items-center justify-between z-10">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-cyan-400 text-lg">accessibility_new</span>
-                  <span className="text-xs font-bold text-cyan-300">3D Sign Language Avatar</span>
-                </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                  avatarAction === "sign_asl" ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 animate-pulse" : "bg-slate-800 text-slate-400"
-                }`}>
-                  {avatarAction === "sign_asl" ? "Signing..." : "Ready"}
+          {/* ── B. Visual Stage: Teacher Live Video Stream & 3D Sign Language Avatar ── */}
+          <div className="flex flex-col gap-3">
+            {/* Stage Layout Controls Toolbar */}
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-sky-400 text-sm">view_quilt</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                  Visual Presentation Stage
                 </span>
+                {remoteVideoActive && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Teacher Video Live</span>
+                  </span>
+                )}
               </div>
 
-              {/* 3D WebGL Avatar Canvas Container */}
-              <div className="w-full h-48 relative flex items-center justify-center my-1 overflow-hidden rounded-2xl bg-slate-950/40">
-                <SignAvatar
-                  gestureId={avatarAction === "sign_asl" ? "hello" : (avatarAction === "wave" ? "hello" : (avatarAction === "thumbs_up" ? "yes" : (avatarAction === "peace" ? "victory" : "idle")))}
-                  framing="body"
-                  showControls={false}
-                  className="w-full h-full min-h-[190px]"
-                />
-              </div>
-
-              {/* Synchronized Avatar Sign Caption & Replay */}
-              <div className="z-10 flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
-                <span className="text-[11px] text-slate-400 truncate max-w-[180px]">
-                  {avatarAction === "sign_asl" ? "Translating speech to signs..." : "Synced with incoming speech"}
-                </span>
+              <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
                 <button
-                  onClick={() => {
-                    setAvatarAction("sign_asl");
-                    setAvatarSpeaking(true);
-                    setTimeout(() => {
-                      setAvatarAction("idle");
-                      setAvatarSpeaking(false);
-                    }, 4000);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold flex items-center gap-1 transition-all"
-                  title="Replay signing animation"
+                  type="button"
+                  onClick={handleToggleCamera}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                    cameraActive
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30"
+                      : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30"
+                  }`}
+                  title={cameraActive ? "Turn off camera" : "Share camera so teacher sees your sign gestures"}
                 >
-                  <span className="material-symbols-outlined text-xs">replay</span>
-                  <span>Sign Avatar</span>
+                  <span className="material-symbols-outlined !text-xs">
+                    {cameraActive ? "videocam_off" : "videocam"}
+                  </span>
+                  <span>{cameraActive ? "Camera ON" : "Share My Video"}</span>
+                </button>
+                <div className="w-px h-4 bg-slate-800 mx-0.5 hidden sm:block" />
+                <button
+                  onClick={() => setVideoLayoutMode("split")}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                    videoLayoutMode === "split" ? "bg-sky-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Side-by-Side
+                </button>
+                <button
+                  onClick={() => setVideoLayoutMode("avatar_focus")}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                    videoLayoutMode === "avatar_focus" ? "bg-cyan-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Avatar Focus
+                </button>
+                <button
+                  onClick={() => setVideoLayoutMode("video_focus")}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                    videoLayoutMode === "video_focus" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Video Focus
                 </button>
               </div>
             </div>
 
-            {/* Box 2: Voluntary Sign Language Camera (Section 2 - Optional) */}
-            <div className={`rounded-3xl ${themeClasses.panel} p-4 flex flex-col justify-between relative overflow-hidden min-h-[280px]`}>
-              <div className="flex items-center justify-between z-10">
+            {/* Grid Layout Container */}
+            <div className={`grid gap-4 ${
+              videoLayoutMode === "split"
+                ? "grid-cols-1 md:grid-cols-2"
+                : "grid-cols-1"
+            }`}>
+              {/* Box 1: 3D Sign Language Avatar */}
+              <div className={`rounded-3xl ${themeClasses.panel} p-4 flex flex-col justify-between relative overflow-hidden ${
+                videoLayoutMode === "avatar_focus" ? "min-h-[380px]" : "min-h-[280px]"
+              }`}>
+                <div className="flex items-center justify-between z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-cyan-400 text-lg">accessibility_new</span>
+                    <span className="text-xs font-bold text-cyan-300">3D Sign Language Avatar</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                    avatarAction !== "idle" ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 animate-pulse" : "bg-slate-800 text-slate-400"
+                  }`}>
+                    {avatarAction !== "idle" ? "Signing Speech..." : "Ready"}
+                  </span>
+                </div>
+
+                {/* 3D WebGL Avatar Canvas Container */}
+                <div className={`w-full relative flex items-center justify-center my-1 overflow-hidden rounded-2xl bg-slate-950/40 ${
+                  videoLayoutMode === "avatar_focus" ? "h-80" : "h-64"
+                }`}>
+                  <SignAvatar
+                    gestureId={avatarAction === "sign_asl" ? "hello" : avatarAction}
+                    framing="body"
+                    showControls={false}
+                    className="w-full h-full min-h-[190px]"
+                  />
+                </div>
+
+                {/* Synchronized Avatar Sign Caption & Replay */}
+                <div className="z-10 flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
+                  <span className="text-[11px] text-slate-400 truncate max-w-[200px]">
+                    {avatarAction !== "idle" ? `Signing: ${avatarAction}` : "Synced with incoming speech"}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setAvatarAction("sign_asl");
+                      setAvatarSpeaking(true);
+                      setTimeout(() => {
+                        setAvatarAction("idle");
+                        setAvatarSpeaking(false);
+                      }, 4000);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    title="Replay signing animation"
+                  >
+                    <span className="material-symbols-outlined text-xs">replay</span>
+                    <span>Replay Sign</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Box 2: Live Teacher Video Stream (WebRTC) */}
+              <div className={`rounded-3xl ${themeClasses.panel} p-4 flex flex-col justify-between relative overflow-hidden ${
+                videoLayoutMode === "video_focus" ? "min-h-[380px]" : "min-h-[280px]"
+              }`}>
+                <div className="flex items-center justify-between z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-emerald-400 text-lg">cast_for_education</span>
+                    <span className="text-xs font-bold text-emerald-300">Teacher Video Broadcast</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {remoteVideoActive && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (remoteVideoRef.current) {
+                            remoteVideoRef.current.muted = !remoteVideoRef.current.muted;
+                            setIsTeacherAudioMuted(remoteVideoRef.current.muted);
+                          }
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-slate-300 flex items-center gap-1 border border-slate-700 transition-all cursor-pointer"
+                        title="Toggle Teacher Audio output"
+                      >
+                        <span className="material-symbols-outlined !text-xs">
+                          {isTeacherAudioMuted ? "volume_off" : "volume_up"}
+                        </span>
+                        <span>{isTeacherAudioMuted ? "Unmute Audio" : "Audio On"}</span>
+                      </button>
+                    )}
+                    {remoteVideoActive ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Teacher Live</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                        Waiting for Teacher...
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Remote Video Stream Container */}
+                <div className={`relative w-full rounded-2xl bg-slate-950 border border-slate-800/80 overflow-hidden flex flex-col items-center justify-center my-2 ${
+                  videoLayoutMode === "video_focus" ? "h-80" : "h-64"
+                }`}>
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    onLoadedMetadata={(e) => {
+                      e.target.play().catch(() => {});
+                      setRemoteVideoActive(true);
+                    }}
+                    className={`w-full h-full object-cover transform -scale-x-100 transition-opacity duration-300 ${
+                      remoteVideoActive ? "opacity-100" : "opacity-0 absolute pointer-events-none"
+                    }`}
+                  />
+
+                  {/* Corner PiP preview of student's own camera when active so student sees both teacher and self */}
+                  {cameraActive && (
+                    <div className="absolute bottom-2 right-2 w-28 h-20 rounded-xl overflow-hidden border border-emerald-500/60 shadow-xl bg-black z-20">
+                      <video
+                        ref={(el) => {
+                          if (el && engineRef.current && engineRef.current.stream && el.srcObject !== engineRef.current.stream) {
+                            el.srcObject = engineRef.current.stream;
+                            el.play().catch(() => {});
+                          }
+                        }}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover transform -scale-x-100"
+                      />
+                      <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/70 text-[8px] font-bold text-emerald-300 flex items-center gap-1">
+                        <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>You (Live)</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {!remoteVideoActive && (
+                    <div className="flex flex-col items-center text-center p-4 gap-2">
+                      <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500">
+                        <span className="material-symbols-outlined text-xl">tv</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-300">Teacher Live Broadcast Feed</p>
+                        <p className="text-[10px] text-slate-500 max-w-[220px]">
+                          When your instructor starts broadcasting video from the Teacher Studio, their stream will appear here in real time.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer status */}
+                <div className="z-10 flex items-center justify-between text-[11px] pt-1 text-slate-400">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${remoteVideoActive ? "bg-emerald-400" : "bg-slate-600"}`} />
+                    <span>{remoteVideoActive ? "Teacher Video Connected" : "Audio-to-Captions Active"}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">Zero-Mic Required</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Optional Student Sign Camera Accordion (Always voluntary) */}
+            <div className={`rounded-2xl ${themeClasses.panel} p-3 flex flex-col gap-2 border border-slate-800/80`}>
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-emerald-400 text-lg">videocam</span>
-                  <span className="text-xs font-bold text-emerald-300">Sign Camera (Optional)</span>
+                  <span className="material-symbols-outlined text-slate-400 text-sm">photo_camera</span>
+                  <span className="text-xs font-bold text-slate-300">Your Student Sign Camera (Optional Gesture Recognition)</span>
                 </div>
                 <button
                   onClick={handleToggleCamera}
-                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border transition-all flex items-center gap-1 ${
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border transition-all flex items-center gap-1 cursor-pointer ${
                     cameraActive
                       ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                       : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${cameraActive ? "bg-emerald-400 animate-ping" : "bg-slate-500"}`} />
-                  <span>{cameraActive ? "Camera ON" : "Camera OFF"}</span>
+                  <span>{cameraActive ? "My Camera ON" : "Turn On My Camera"}</span>
                 </button>
               </div>
 
-              {/* Camera Video Stream or Friendly Off-State */}
-              <div className="relative w-full h-44 rounded-2xl bg-slate-950 border border-slate-800/80 overflow-hidden flex flex-col items-center justify-center my-2">
-                {cameraActive ? (
-                  <>
-                    <video
-                      ref={videoRef}
-                      className="w-full h-full object-cover transform -scale-x-100"
-                      playsInline
-                      muted
-                    />
-                    <canvas
-                      ref={canvasRef}
-                      className="absolute inset-0 w-full h-full pointer-events-none transform -scale-x-100"
-                    />
-
-                    {/* Landmark Hold Progress */}
-                    {holdProgress > 0 && holdProgress < 100 && (
-                      <div className="absolute bottom-2 left-2 right-2 bg-slate-950/80 rounded-lg p-1.5 backdrop-blur-md">
-                        <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className="bg-emerald-400 h-full transition-all duration-75"
-                            style={{ width: `${holdProgress}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center text-center p-4 gap-2">
-                    <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500">
-                      <span className="material-symbols-outlined text-xl">videocam_off</span>
+              {cameraActive && (
+                <div className="relative w-full h-36 rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden mt-1">
+                  <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover transform -scale-x-100"
+                    playsInline
+                    muted
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    className="absolute inset-0 w-full h-full pointer-events-none transform -scale-x-100"
+                  />
+                  {detectedSign && (
+                    <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-0.5 rounded text-[11px] text-emerald-300 font-bold border border-emerald-500/30">
+                      Sign: {detectedSign.label} ({Math.round(detectedSign.score * 100)}%)
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-300">Camera is Optional</p>
-                      <p className="text-[10px] text-slate-500 max-w-[200px]">
-                        Participate 100% via text or enable camera to sign directly.
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleToggleCamera}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all shadow-md flex items-center gap-1 cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-xs">videocam</span>
-                      <span>Enable Camera</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Camera State Footer: Recognized gesture or error */}
-              <div className="z-10 flex items-center justify-between text-[11px] pt-1">
-                {cameraError ? (
-                  <span className="text-red-400 truncate max-w-full font-medium">{cameraError}</span>
-                ) : unclearWarning ? (
-                  <span className="text-amber-400 truncate max-w-full font-medium">⚠️ {unclearWarning}</span>
-                ) : cameraActive && detectedSign ? (
-                  <span className="text-emerald-300 font-bold flex items-center gap-1">
-                    <span>{detectedSign.icon}</span>
-                    <span>{detectedSign.label}</span>
-                    <span className="text-[10px] text-slate-400">({detectedSign.confidence}%)</span>
-                  </span>
-                ) : (
-                  <span className="text-slate-500 text-[10px]">
-                    {cameraActive ? "Looking for hand gestures..." : "Microphone disabled • Text ready"}
-                  </span>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-
+          
           {/* Speaking to Meeting Wave Indicator */}
           {isSpeaking && (
             <div className="p-2.5 rounded-2xl bg-indigo-950/80 border border-indigo-500/40 flex items-center justify-between text-indigo-200 text-xs font-bold animate-pulse">

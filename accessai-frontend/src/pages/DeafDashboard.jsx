@@ -609,6 +609,7 @@ export default function DeafDashboard() {
 
             {/* Standard Nav Links (36px Height Each) */}
             {[
+              { id: "meeting", label: "Live Classroom Meet", icon: "video_camera_front" },
               { id: "rewards-store", label: "Reward Store (Redeem)", icon: "storefront" },
               { id: "courses", label: "Course Library", icon: "grid_view" },
               { id: "my-learning", label: "My Learning", icon: "menu_book" },
@@ -621,7 +622,13 @@ export default function DeafDashboard() {
             ].map(item => (
               <button
                 key={item.id}
-                onClick={() => navigate(`/deaf/${item.id === "home" ? "" : item.id}`)}
+                onClick={() => {
+                  if (item.id === "meeting") {
+                    navigate("/meeting");
+                  } else {
+                    navigate(`/deaf/${item.id === "home" ? "" : item.id}`);
+                  }
+                }}
                 className={`w-full h-[36px] flex items-center gap-2.5 px-3 py-1 rounded-lg text-left text-xs font-semibold transition-all flex-shrink-0 ${
                   activeTab === item.id
                     ? "bg-[#0866F5] text-white shadow-xs font-bold"
@@ -717,6 +724,40 @@ export default function DeafDashboard() {
                   className="px-3 py-1.5 rounded-xl bg-[#0866F5] text-white text-xs font-bold shadow-xs hover:bg-blue-600 transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer flex-shrink-0"
                 >
                   <span>Open Sign Arena</span>
+                </button>
+              </div>
+
+              {/* Live Classroom Meeting Card */}
+              <div
+                onClick={() => navigate("/meeting")}
+                className="p-3 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border border-emerald-200/80 shadow-xs flex items-center justify-between gap-2.5 cursor-pointer hover:border-emerald-400 transition-all min-w-0 overflow-hidden"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-xs flex-shrink-0">
+                    <span className="material-symbols-outlined !text-xl">video_camera_front</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="text-xs font-extrabold text-[#10265C] truncate">
+                        Live Classroom Meeting
+                      </h2>
+                      <span className="text-[8px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 border border-emerald-200 flex-shrink-0 animate-pulse">
+                        LIVE
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 font-medium truncate">Teacher Video, Live Captions & 3D Sign Avatar</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate("/meeting");
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer flex-shrink-0"
+                >
+                  <span>Join Class</span>
+                  <span className="text-xs font-bold">→</span>
                 </button>
               </div>
 

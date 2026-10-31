@@ -145,6 +145,8 @@ export class SignLanguageMeetingEngine {
   async startCamera(videoElement, canvasElement) {
     this.videoElement = videoElement;
     this.canvasElement = canvasElement;
+    this.useExistingStream = false;
+    this.isStopped = false;
 
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
@@ -155,6 +157,19 @@ export class SignLanguageMeetingEngine {
         },
         audio: false
       });
+
+      // Lock hardware / browser digital zoom and auto-framing to 1.0x (stable)
+      try {
+        const videoTrack = this.stream.getVideoTracks()[0];
+        if (videoTrack && videoTrack.getCapabilities) {
+          const caps = videoTrack.getCapabilities();
+          if (caps.zoom) {
+            await videoTrack.applyConstraints({
+              advanced: [{ zoom: caps.zoom.min || 1 }]
+            }).catch(() => {});
+          }
+        }
+      } catch (zoomErr) {}
 
       this.videoElement.srcObject = this.stream;
       await this.videoElement.play();
@@ -167,7 +182,17 @@ export class SignLanguageMeetingEngine {
     }
   }
 
+  attachExistingVideo(videoElement, canvasElement) {
+    this.videoElement = videoElement;
+    this.canvasElement = canvasElement;
+    this.useExistingStream = true;
+    this.isStopped = false;
+    this._startPredictionLoop();
+    return true;
+  }
+
   stopCamera() {
+    this.isStopped = true;
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -176,12 +201,14 @@ export class SignLanguageMeetingEngine {
       this.stream.getTracks().forEach((track) => track.stop());
       this.stream = null;
     }
-    if (this.videoElement) {
+    if (!this.useExistingStream && this.videoElement) {
       this.videoElement.srcObject = null;
     }
     if (this.canvasElement) {
       const ctx = this.canvasElement.getContext("2d");
-      ctx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
+      if (ctx) {
+        ctx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
+      }
     }
     this.currentHoldGesture = null;
     this.onHoldProgress(0);
@@ -189,11 +216,13 @@ export class SignLanguageMeetingEngine {
 
   _startPredictionLoop() {
     const loop = () => {
+      if (this.isStopped) return;
       const video = this.videoElement;
       const canvas = this.canvasElement;
       const recognizer = this.recognizer;
 
-      if (!video || !canvas || !recognizer || !this.stream) return;
+      if (!video || !canvas || !recognizer) return;
+      if (!this.stream && !this.useExistingStream) return;
 
       if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {

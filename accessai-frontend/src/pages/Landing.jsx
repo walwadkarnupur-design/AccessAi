@@ -140,11 +140,27 @@ function IndiaFlag() {
 export default function Landing() {
   const { t, language, setLanguage, languages } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
-  const landingStep = searchParams.get("step") === "mode" ? "mode" : "language";
+  const currentStepParam = searchParams.get("step");
+  const [stepState, setStepState] = useState(
+    currentStepParam === "mode" ? "mode" : currentStepParam === "role" ? "role" : "language"
+  );
+
+  useEffect(() => {
+    if (currentStepParam === "mode" || currentStepParam === "role") {
+      setStepState(currentStepParam);
+    } else {
+      setStepState("language");
+    }
+  }, [currentStepParam]);
+
+  const landingStep = stepState;
 
   const setLandingStep = useCallback((step) => {
+    setStepState(step);
     if (step === "mode") {
       setSearchParams({ step: "mode" });
+    } else if (step === "role") {
+      setSearchParams({ step: "role" });
     } else {
       setSearchParams({});
     }
@@ -787,13 +803,8 @@ export default function Landing() {
           {landingStep !== "language" && (
             <BackButton
               onClick={() => {
-                if (
-                  typeof window !== "undefined" &&
-                  window.history.state &&
-                  typeof window.history.state.idx === "number" &&
-                  window.history.state.idx > 0
-                ) {
-                  navigate(-1);
+                if (landingStep === "mode") {
+                  setLandingStep("role");
                 } else {
                   setLandingStep("language");
                 }
@@ -1005,6 +1016,134 @@ export default function Landing() {
                     <span>Select ಕನ್ನಡ</span>
                     <span className="text-sm font-bold">→</span>
                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : landingStep === "role" ? (
+          <section className="max-w-5xl mx-auto flex flex-col items-center animate-fadeIn">
+            {/* Header / Intro */}
+            <div className="text-center mb-10 pt-4">
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <span className="px-3.5 py-1 rounded-full bg-blue-100 text-[#0066ff] text-xs font-bold tracking-wide uppercase">
+                  Step 2 of 2: Select Role
+                </span>
+              </div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-[#0f172a] tracking-tight mb-3">
+                Select Your Role
+              </h1>
+              <p className="text-sm md:text-base text-slate-600 max-w-xl mx-auto leading-relaxed">
+                Select your role to access your personalized learning environment or educator classroom portal.
+              </p>
+            </div>
+
+            {/* 2-Card Grid: Student Login vs Teacher Login */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+              {/* Student Card */}
+              <div
+                onClick={() => setLandingStep("mode")}
+                className="group relative bg-white border-2 border-slate-200 hover:border-[#0066ff] rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0066ff] flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
+                    <span className="material-symbols-outlined !text-3xl">school</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-2">
+                    <h2 className="text-xl font-bold text-slate-900 group-hover:text-[#0066ff] transition-colors">
+                      Student Login
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0066ff] text-[11px] font-bold">
+                      Student Portal
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+                    Personalized multi-modal learning portal tailored for Blind, Deaf, and Motor accessibility needs with conversational AI companions.
+                  </p>
+
+                  <div className="space-y-2.5 mb-6">
+                    <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                      <span className="w-6 h-6 rounded-md bg-blue-100 text-[#0066ff] flex items-center justify-center text-xs shrink-0">🎙️</span>
+                      <span>Voice-first assistant & natural interruption</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                      <span className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs shrink-0">🤟</span>
+                      <span>3D Sign Language avatar & gesture camera</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                      <span className="w-6 h-6 rounded-md bg-purple-100 text-purple-600 flex items-center justify-center text-xs shrink-0">🎯</span>
+                      <span>Hands-free head tracking & dwell clicks</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLandingStep("mode");
+                    }}
+                    className="w-full py-3.5 px-6 rounded-2xl bg-[#0066ff] hover:bg-blue-600 active:scale-98 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <span>Continue as Student</span>
+                    <span className="text-base font-bold">→</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Teacher Card */}
+              <div
+                onClick={() => navigate("/teacher/login")}
+                className="group relative bg-white border-2 border-slate-200 hover:border-emerald-500 rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
+                    <span className="material-symbols-outlined !text-3xl">cast_for_education</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-2">
+                    <h2 className="text-xl font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                      Teacher Login
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
+                      Educator Portal
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+                    Dedicated educator workspace to manage accessible courses, monitor real-time student progress, review assessments, and host interactive RN sessions.
+                  </p>
+
+                  <div className="space-y-2.5 mb-6">
+                    <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                      <span className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs shrink-0">👥</span>
+                      <span>Real-time student roster & individual profiles</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                      <span className="w-6 h-6 rounded-md bg-amber-100 text-amber-600 flex items-center justify-center text-xs shrink-0">📈</span>
+                      <span>Progress tracking & competency assessments</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                      <span className="w-6 h-6 rounded-md bg-sky-100 text-sky-600 flex items-center justify-center text-xs shrink-0">⚡</span>
+                      <span>Realtime Network (RN) classroom broadcasting</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate("/teacher/login");
+                    }}
+                    className="w-full py-3.5 px-6 rounded-2xl bg-[#16a34a] hover:bg-emerald-700 active:scale-98 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <span>Continue to Teacher Portal</span>
+                    <span className="text-base font-bold">→</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1405,10 +1544,10 @@ export default function Landing() {
         {landingStep === "language" && (
           <button
             type="button"
-            onClick={() => setLandingStep("mode")}
+            onClick={() => setLandingStep("role")}
             className="px-6 py-3 rounded-2xl bg-[#0066ff] hover:bg-blue-600 active:scale-95 text-white text-xs md:text-sm font-bold shadow-md transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap"
           >
-            <span>Continue to Mode Selection</span>
+            <span>Continue to Role Selection</span>
             <span className="text-base font-bold">→</span>
           </button>
         )}
