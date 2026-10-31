@@ -1045,7 +1045,7 @@ export default function CertificateVerification() {
             {/* Dynamic Personalized Certificate Visual Preview */}
             <div className="rounded-2xl overflow-hidden border-2 border-primary/20 shadow-lg my-6 bg-slate-50 relative group">
               <img
-                src={`http://127.0.0.1:5000/certificate/image/${result.certificateId || result.queryId}`}
+                src={`/certificate/image/${result.certificateId || result.queryId}`}
                 alt="Personalized Course Certificate"
                 className="w-full h-auto object-contain transition-transform duration-300"
                 onError={(e) => {
@@ -1068,7 +1068,7 @@ export default function CertificateVerification() {
 
                 <div className="flex items-center gap-2.5">
                   <a
-                    href={`http://127.0.0.1:5000/certificate/download/${result.certificateId || result.queryId}`}
+                    href={`/certificate/download/${result.certificateId || result.queryId}`}
                     download
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all font-headline cursor-pointer"
                   >
@@ -1076,7 +1076,7 @@ export default function CertificateVerification() {
                     <span>Download PDF</span>
                   </a>
                   <a
-                    href={`http://127.0.0.1:5000/certificate/view/${result.certificateId || result.queryId}`}
+                    href={`/certificate/view/${result.certificateId || result.queryId}`}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest active:scale-95 text-primary font-bold text-xs border border-primary/30 transition-all font-headline cursor-pointer"

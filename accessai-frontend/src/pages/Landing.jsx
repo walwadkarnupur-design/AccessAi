@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useVoiceAssistant } from "../hooks/useVoice";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import LanguageSelector from "../components/LanguageSelector";
+import BackButton from "../components/BackButton";
 
 
 const STATE_IDLE = "IDLE";
@@ -87,11 +88,76 @@ const demoAccounts = [
   }
 ];
 
+function SparkleIcon({ className = "w-6 h-6" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="sparkle-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#38bdf8" />
+          <stop offset="1" stopColor="#0066ff" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M12 2C12 7.52285 7.52285 12 2 12C7.52285 12 12 16.4772 12 22C12 16.4772 16.4772 12 22 12C16.4772 12 12 7.52285 12 2Z"
+        fill="url(#sparkle-grad)"
+      />
+    </svg>
+  );
+}
+
+function UkFlag() {
+  return (
+    <span className="inline-flex items-center justify-center w-[32px] h-[22px] overflow-hidden rounded-[2px] shadow-2xs shrink-0" title="United Kingdom">
+      <svg viewBox="0 0 60 30" className="w-full h-full block">
+        <clipPath id="uk-clip"><path d="M0,0 v30 h60 v-30 z"/></clipPath>
+        <clipPath id="uk-diag"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath>
+        <g clipPath="url(#uk-clip)">
+          <path d="M0,0 v30 h60 v-30 z" fill="#012169"/>
+          <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" strokeWidth="6"/>
+          <path d="M0,0 L60,30 M60,0 L0,30" clipPath="url(#uk-diag)" stroke="#C8102E" strokeWidth="4"/>
+          <path d="M30,0 v30 M0,15 h60" stroke="#fff" strokeWidth="10"/>
+          <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" strokeWidth="6"/>
+        </g>
+      </svg>
+    </span>
+  );
+}
+
+function IndiaFlag() {
+  return (
+    <span className="inline-flex items-center justify-center w-[32px] h-[22px] overflow-hidden rounded-[2px] shadow-2xs shrink-0" title="India">
+      <svg viewBox="0 0 225 150" className="w-full h-full block">
+        <rect width="225" height="50" fill="#FF9933"/>
+        <rect y="50" width="225" height="50" fill="#FFFFFF"/>
+        <rect y="100" width="225" height="50" fill="#138808"/>
+        <circle cx="112.5" cy="75" r="20" fill="none" stroke="#000080" strokeWidth="3"/>
+        <circle cx="112.5" cy="75" r="3.5" fill="#000080"/>
+      </svg>
+    </span>
+  );
+}
+
 export default function Landing() {
   const { t, language, setLanguage, languages } = useLanguage();
-  const [landingStep, setLandingStep] = useState("language"); // "language" | "mode"
-  const [selected, setSelected] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const landingStep = searchParams.get("step") === "mode" ? "mode" : "language";
+
+  const setLandingStep = useCallback((step) => {
+    if (step === "mode") {
+      setSearchParams({ step: "mode" });
+    } else {
+      setSearchParams({});
+    }
+  }, [setSearchParams]);
+
+  const [selected, setSelected] = useState("blind");
   const [showDemoModal, setShowDemoModal] = useState(false);
+  const [demoExpanded, setDemoExpanded] = useState(false);
+
+  const selectedDemoAcc = useMemo(() => {
+    if (!selected) return null;
+    return demoAccounts.find((d) => d.mode === selected) || null;
+  }, [selected]);
   const navigate = useNavigate();
   const { loginDemoUser, DEMO_MODE, user, disabilityType, logout } = useAuth();
 
@@ -714,39 +780,59 @@ export default function Landing() {
   const isListening = agentState === STATE_LISTENING;
 
   return (
-    <div className="min-h-screen bg-background text-on-surface font-sans selection:bg-primary-container selection:text-white">
-      {/* ── Header ── */}
-      <header className="fixed top-0 w-full z-50 flex justify-between items-center px-margin-mobile md:px-margin-desktop h-16 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 shadow-sm">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
-          <span className="text-2xl font-bold text-primary font-headline">AccessAI</span>
-          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hidden sm:inline-block">
-            3 Adaptive Modes
-          </span>
+    <div className="min-h-screen bg-gradient-to-b from-white via-white to-[#f0f6ff] text-slate-900 font-sans selection:bg-[#0066ff] selection:text-white">
+      {/* ── Top Navbar ── */}
+      <header className="fixed top-0 w-full z-50 flex justify-between items-center px-6 md:px-12 h-16 bg-white border-b border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div className="flex items-center gap-3">
+          {landingStep !== "language" && (
+            <BackButton
+              onClick={() => {
+                if (
+                  typeof window !== "undefined" &&
+                  window.history.state &&
+                  typeof window.history.state.idx === "number" &&
+                  window.history.state.idx > 0
+                ) {
+                  navigate(-1);
+                } else {
+                  setLandingStep("language");
+                }
+              }}
+              fallback="/"
+            />
+          )}
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}>
+            <SparkleIcon className="w-6 h-6" />
+            <span className="text-2xl font-bold tracking-tight">
+              <span className="text-[#0f172a]">Access</span>
+              <span className="text-[#0066ff]">AI</span>
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate("/verify")}
-            className="px-3 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-500 border border-sky-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+            className="px-3.5 py-1.5 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#e0f2fe] text-xs font-semibold flex items-center gap-2 transition-all shadow-2xs cursor-pointer hover:bg-sky-50"
             title="Verify course certificates anchored on MST Blockchain"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="w-2 h-2 rounded-full bg-[#10b981]"></span>
             <span>Verify Credentials (MST)</span>
           </button>
           <LanguageSelector />
           {user && disabilityType ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-on-surface-variant hidden md:inline">
+              <span className="text-xs font-medium text-slate-600 hidden md:inline">
                 {user.displayName || user.email}
               </span>
               <button
                 onClick={() => navigate(`/${disabilityType}`)}
-                className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm"
+                className="px-4 py-1.5 rounded-full bg-[#0066ff] text-white text-xs font-semibold hover:bg-blue-600 active:scale-95 transition-all shadow-xs cursor-pointer"
               >
                 {t("dashboard", "Dashboard")}
               </button>
               <button
                 onClick={logout}
-                className="px-3 py-1.5 rounded-xl border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high text-xs font-semibold active:scale-95 transition-all"
+                className="px-3 py-1.5 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
               >
                 {t("sign_out", "Sign Out")}
               </button>
@@ -760,312 +846,430 @@ export default function Landing() {
                   if (el) el.scrollIntoView({ behavior: "smooth" });
                 }, 50);
               }}
-              className="px-4 py-1.5 rounded-xl bg-primary text-white text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer"
+              className="px-4 py-1.5 rounded-full bg-[#0066ff] hover:bg-blue-600 text-white text-xs font-semibold active:scale-95 transition-all shadow-xs cursor-pointer"
             >
-              {t("select_mode", "Select Mode")}
+              Select Mode
             </button>
           )}
-          <button className="p-2 rounded-full hover:bg-surface-container-high transition-colors active:scale-90 duration-200" aria-label="Accessibility Settings">
-            <span className="material-symbols-outlined text-on-surface-variant">settings_accessibility</span>
+          <button className="p-1 rounded-full text-[#4f5d75] hover:text-[#0066ff] transition-colors cursor-pointer" aria-label="Accessibility Settings">
+            <span className="material-symbols-outlined !text-2xl text-[#5c6bc0]">accessibility_new</span>
           </button>
         </div>
       </header>
 
-      {/* ── Hero ── */}
-      <main className="pt-24 pb-32 px-margin-mobile md:px-margin-desktop">
+      {/* ── Main Content ── */}
+      <main className="pt-24 pb-32 px-6 md:px-12">
         {landingStep === "language" ? (
           <section className="max-w-5xl mx-auto flex flex-col items-center animate-fadeIn">
-            {/* Step 1 Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/25 text-primary text-xs font-bold uppercase tracking-wider mb-4">
-              <span className="material-symbols-outlined !text-sm">translate</span>
-              <span>{t("step_1_badge", "Step 1 of 2")} • {t("step_indicator", "Language Selection")}</span>
-            </div>
-
-            {/* Hero Text */}
-            <div className="text-center mb-8">
-              <h1 className="text-4xl md:text-5xl font-bold mb-3 text-on-surface font-headline leading-tight tracking-tight">
-                Welcome to AccessAI
-              </h1>
-              <h2 className="text-xl md:text-2xl font-bold text-primary mb-3">
-                {t("step_1_title", "Choose Your Preferred Language")}
+            {/* 2. Hero (centered) */}
+            <div className="text-center mb-8 pt-4">
+              <div className="flex items-center justify-center gap-2.5 mb-2">
+                <SparkleIcon className="w-8 h-8" />
+                <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
+                  <span className="text-[#0f172a]">Access</span>
+                  <span className="text-[#0066ff]">AI</span>
+                </h1>
+              </div>
+              <h2 className="text-xl md:text-2xl font-bold text-[#0f172a] tracking-tight mb-2">
+                Equal Access Real Opportunities.
               </h2>
-              <p className="text-base text-on-surface-variant max-w-2xl mx-auto leading-relaxed">
-                {t("step_1_sub", "Select a language to customize voice narration, live subtitles, and learning controls.")}
+              <p className="text-sm md:text-base text-[#64748b]">
+                Choose your language and preferred accessibility mode to get started.
               </p>
             </div>
 
-            {/* 3 Prominent Language Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-10">
-              {languages.map((langItem) => {
-                const isCurrent = language === langItem.code;
-                return (
-                  <button
-                    key={langItem.code}
-                    type="button"
-                    onClick={() => {
-                      setLanguage(langItem.code);
-                      setLandingStep("mode");
-                    }}
-                    className={`glass-card p-6 md:p-8 rounded-3xl text-left flex flex-col justify-between gap-6 group cursor-pointer transition-all duration-300 relative ${
-                      isCurrent
-                        ? "border-2 border-primary ring-4 ring-primary/25 -translate-y-2 shadow-xl bg-primary-fixed/20"
-                        : "border border-outline-variant/30 hover:-translate-y-2 hover:border-primary/50 shadow-sm bg-surface"
-                    }`}
-                  >
-                    {isCurrent && (
-                      <div className="absolute top-4 right-4">
-                        <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 flex items-center gap-1">
-                          <span className="material-symbols-outlined !text-xs">check</span>
-                          Selected
-                        </span>
-                      </div>
-                    )}
+            {/* 3. Adaptive Modes Bar */}
+            <div className="relative w-full max-w-3xl mx-auto mb-8">
+              {/* Centered pill badge on top border */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                <span className="px-3 py-0.5 rounded-full bg-[#e0f2fe] text-[#0284c7] text-xs font-semibold border border-[#bae6fd] shadow-2xs whitespace-nowrap">
+                  3 Adaptive Modes
+                </span>
+              </div>
 
-                    <div>
-                      <div className="text-5xl mb-4 filter drop-shadow-sm">{langItem.flag}</div>
-                      <h3 className="text-2xl font-bold text-on-surface font-headline group-hover:text-primary transition-colors">
-                        {langItem.nativeName}
-                      </h3>
-                      <p className="text-xs font-semibold text-primary mt-1">
-                        {langItem.label} ({langItem.localeLabel})
-                      </p>
-                      <p className="text-xs text-on-surface-variant mt-3 leading-relaxed">
-                        {langItem.code === "kn"
-                          ? "ಧ್ವನಿ ಸಂವಾದ, ಲೈವ್ ಉಪಶೀರ್ಷಿಕೆಗಳು ಮತ್ತು ಪೂರ್ಣ ಸನ್ನೆ ಭಾಷಾ ಬೆಂಬಲ."
-                          : langItem.code === "hi"
-                          ? "आवाज मार्गदर्शन, लाइव उपशीर्षक और संपूर्ण सांकेतिक भाषा समर्थन।"
-                          : "Screen reader narration, live speech captions, and ASL curriculum."}
-                      </p>
-                    </div>
-
-                    <div className="pt-3 border-t border-outline-variant/20 flex items-center justify-between text-xs font-bold text-primary group-hover:translate-x-1 transition-transform">
-                      <span>{isCurrent ? "Continue with this language" : `Select ${langItem.nativeName}`}</span>
-                      <span className="material-symbols-outlined !text-sm">arrow_forward</span>
-                    </div>
-                  </button>
-                );
-              })}
+              <div className="rounded-2xl border border-sky-100 bg-[#f8fbff] px-8 py-3.5 flex items-center justify-between text-[#0f172a] text-sm font-semibold shadow-2xs">
+                <div className="flex-1 flex items-center justify-center gap-2.5">
+                  <span className="material-symbols-outlined text-[#0f172a] !text-2xl">hearing</span>
+                  <span className="text-[#0f172a]">Deaf Mode</span>
+                </div>
+                <div className="h-6 w-px bg-slate-200"></div>
+                <div className="flex-1 flex items-center justify-center gap-2.5">
+                  <span className="material-symbols-outlined text-[#0f172a] !text-2xl">visibility_off</span>
+                  <span className="text-[#0f172a]">Blind Mode</span>
+                </div>
+                <div className="h-6 w-px bg-slate-200"></div>
+                <div className="flex-1 flex items-center justify-center gap-2.5">
+                  <span className="material-symbols-outlined text-[#0f172a] !text-2xl">front_hand</span>
+                  <span className="text-[#0f172a]">Hands -Free Mode</span>
+                </div>
+              </div>
             </div>
 
-            {/* Continue Button */}
-            <div className="flex flex-col items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setLandingStep("mode")}
-                className="px-8 py-3.5 rounded-2xl bg-primary text-white text-sm font-bold shadow-lg shadow-primary/25 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            {/* 4. Language cards (3 columns, equal gap) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl mb-8 items-stretch">
+              {/* Card 1: English (Selected state) */}
+              <div
+                onClick={() => setLanguage("en")}
+                className={`rounded-2xl bg-white p-6 shadow-xs relative flex flex-col justify-between min-h-[220px] transition-all cursor-pointer ${
+                  language === "en"
+                    ? "border-2 border-[#0066ff]"
+                    : "border border-slate-200 hover:border-blue-400"
+                }`}
               >
-                <span>{t("continue_to_modes", "Continue to Mode Selection")}</span>
-                <span className="material-symbols-outlined !text-base">arrow_forward</span>
-              </button>
-              <p className="text-xs text-on-surface-variant/70">
-                You can change your language anytime using the language switcher.
-              </p>
+                {language === "en" && (
+                  <div className="absolute -top-3 right-6 z-10">
+                    <span className="px-3 py-1 rounded-full bg-[#0066ff] text-white text-[11px] font-bold tracking-wide shadow-2xs">
+                      ✓ SELECTED
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-4xl font-extrabold text-[#0f172a] tracking-tight">
+                      Eng
+                    </div>
+                    <UkFlag />
+                  </div>
+                  <div className="text-2xl font-bold text-[#000000]">English</div>
+                  <p className="text-xs text-[#0066ff] font-medium mt-1">English (English (US))</p>
+                </div>
+                <div>
+                  <div className="my-3 border-t border-slate-100"></div>
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#0066ff] hover:text-blue-700">
+                    <span>Select English</span>
+                    <span className="text-sm font-bold">→</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Hindi */}
+              <div
+                onClick={() => setLanguage("hi")}
+                className={`rounded-2xl bg-white p-6 shadow-xs relative flex flex-col justify-between min-h-[220px] transition-all cursor-pointer ${
+                  language === "hi"
+                    ? "border-2 border-[#0066ff]"
+                    : "border border-slate-200 hover:border-blue-400"
+                }`}
+              >
+                {language === "hi" && (
+                  <div className="absolute -top-3 right-6 z-10">
+                    <span className="px-3 py-1 rounded-full bg-[#0066ff] text-white text-[11px] font-bold tracking-wide shadow-2xs">
+                      ✓ SELECTED
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-4xl font-extrabold text-[#0f172a] tracking-tight">hindi</div>
+                    <IndiaFlag />
+                  </div>
+                  <div className="text-xl font-bold text-[#0f172a] mt-1">हिंदी</div>
+                  <p className="text-xs text-[#0066ff] font-medium mt-0.5">Hin (हिंदी (भारत))</p>
+                </div>
+                <div>
+                  <div className="my-3 border-t border-slate-100"></div>
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#0066ff] hover:text-blue-700">
+                    <span>Select हिंदी</span>
+                    <span className="text-sm font-bold">→</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Kannada */}
+              <div
+                onClick={() => setLanguage("kn")}
+                className={`rounded-2xl bg-white p-6 shadow-xs relative flex flex-col justify-between min-h-[220px] transition-all cursor-pointer ${
+                  language === "kn"
+                    ? "border-2 border-[#0066ff]"
+                    : "border border-slate-200 hover:border-blue-400"
+                }`}
+              >
+                {language === "kn" && (
+                  <div className="absolute -top-3 right-6 z-10">
+                    <span className="px-3 py-1 rounded-full bg-[#0066ff] text-white text-[11px] font-bold tracking-wide shadow-2xs">
+                      ✓ SELECTED
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-4xl font-extrabold text-[#0f172a] tracking-tight">ka</div>
+                    <IndiaFlag />
+                  </div>
+                  <div className="text-xl font-bold text-[#0f172a] mt-1">ಕನ್ನಡ</div>
+                  <p className="text-xs text-[#0066ff] font-medium mt-0.5">Kannada (ಕನ್ನಡ (ಭಾರತ))</p>
+                </div>
+                <div>
+                  <div className="my-3 border-t border-slate-100"></div>
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#0066ff] hover:text-blue-700">
+                    <span>Select ಕನ್ನಡ</span>
+                    <span className="text-sm font-bold">→</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         ) : (
-          <section className="max-w-6xl mx-auto flex flex-col items-center animate-fadeIn">
-            {/* Step 2 Top Bar: Step 2 badge & "Change Language" Button */}
-            <div className="w-full flex items-center justify-between mb-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/10 border border-secondary/25 text-secondary text-xs font-bold uppercase tracking-wider">
-                <span className="material-symbols-outlined !text-sm">accessibility_new</span>
-                <span>{t("step_2_badge", "Step 2 of 2")} • {t("modes_badge", "3 Adaptive Modes")}</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setLandingStep("language")}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-outline-variant/40 bg-surface hover:bg-surface-container-high text-on-surface text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
-                title="Change preferred language"
-              >
-                <span className="text-base">{languages.find(l => l.code === language)?.flag || "🌐"}</span>
-                <span>{t("change_language", "Change Language")} ({languages.find(l => l.code === language)?.nativeName || "English"})</span>
-                <span className="material-symbols-outlined !text-sm text-primary">edit</span>
-              </button>
-            </div>
-
-            <div className="text-center mb-8 mt-2">
-              <h1 className="text-4xl md:text-5xl font-bold mb-4 text-on-surface font-headline leading-tight tracking-tight">
-                {t("welcome_title", "Welcome to AccessAI")}
-              </h1>
-              <p className="text-lg text-on-surface-variant max-w-2xl mx-auto leading-relaxed">
-                {t("welcome_sub", "Please select the accessibility profile that best fits your needs to begin your adaptive experience.")}
-              </p>
-            </div>
-
-          {/* Active Session Status Notice */}
-          {user && disabilityType && (
-            <div className="w-full max-w-2xl mb-8 p-4 rounded-2xl bg-primary-fixed/30 border border-primary/35 flex flex-wrap items-center justify-between gap-4 shadow-sm animate-fadeIn">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-primary text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  verified_user
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-on-surface">
-                    {t("signed_in_as", "Signed in as")} {user.displayName || user.email}
-                  </p>
-                  <p className="text-xs text-on-surface-variant">
-                    {t("current_mode", "Current Mode:")} <strong className="text-primary font-bold">{modes.find((m) => m.key === disabilityType)?.title || disabilityType}</strong>
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+          <section className="max-w-6xl mx-auto flex flex-col items-center animate-fadeIn w-full">
+            {/* 2. Demo Account Banner (3 Separate Sibling Buttons in Non-Clickable Container) */}
+            <div className="w-full max-w-6xl mx-auto rounded-2xl bg-[#f0f7ff] border border-[#cde3fe] p-4 md:p-5 mb-8 shadow-xs flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3.5 flex-wrap">
+                {/* Button 1: Demo Account Button (Left, largest) */}
                 <button
                   type="button"
-                  onClick={() => navigate(`/${disabilityType}`)}
-                  className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                  onClick={() => handleDemoLogin(selectedDemoAcc ? selectedDemoAcc.mode : (selected || "blind"))}
+                  aria-label={
+                    selectedDemoAcc
+                      ? `Log in with demo account for ${selectedDemoAcc.title}`
+                      : "Log in with demo account"
+                  }
+                  className="flex-1 min-w-[280px] p-3 px-4 rounded-xl bg-white/80 hover:bg-white border border-[#cde3fe] hover:border-[#0066ff] shadow-2xs transition-all flex items-center justify-between gap-3 text-left group cursor-pointer active:scale-[0.995] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0066ff] focus-visible:ring-offset-2"
                 >
-                  {t("continue_dashboard", "Continue to Dashboard")}
-                </button>
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="px-3 py-2 rounded-xl border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high text-xs font-semibold active:scale-95 transition-all cursor-pointer"
-                >
-                  {t("sign_out", "Sign Out")}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Grid Cards ── */}
-          <div id="modes-grid" className="grid grid-cols-1 md:grid-cols-3 gap-gutter w-full mb-12">
-            {modes.map((mode) => {
-              const isSelected = selected === mode.key;
-              const isCurrentActive = disabilityType === mode.key;
-              return (
-                <button
-                  key={mode.key}
-                  onClick={() => selectMode(mode.key, true)}
-                  className={`glass-card p-8 rounded-2xl text-left flex flex-col gap-6 group focus-visible w-full cursor-pointer relative ${
-                    isSelected
-                      ? `-translate-y-2 border-2 ${mode.borderActive} ring-4 ${mode.ringColor} shadow-lg`
-                      : "border border-outline-variant/30 hover:-translate-y-2 shadow-sm"
-                  }`}
-                  aria-pressed={isSelected}
-                  aria-label={`Select ${mode.title}`}
-                >
-                  {isCurrentActive && (
-                    <div className="absolute top-4 right-4">
-                      <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Active
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-12 h-12 rounded-xl bg-[#0066ff] flex items-center justify-center text-white shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                      <span className="material-symbols-outlined !text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                        bolt
                       </span>
                     </div>
-                  )}
-
-                  <div className={`w-16 h-16 rounded-2xl ${mode.bgFixed} flex items-center justify-center ${mode.textAccent} ${mode.groupHoverBg} group-hover:text-white transition-all`}>
-                    <span className="material-symbols-outlined !text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                      {mode.icon}
-                    </span>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xl font-bold text-on-surface mb-2 font-headline">{mode.title}</h3>
-                    <p className="text-on-surface-variant text-sm leading-relaxed">{mode.description}</p>
-                  </div>
-
-                  <div className={`mt-auto flex items-center ${mode.textAccent} font-bold text-sm`}>
-                    <span>{isSelected ? t("selected", "Selected") : isCurrentActive ? t("switch_to_mode", "Switch to this mode") : t("select_mode", "Select Mode")}</span>
-                    <span className="material-symbols-outlined ml-2 text-sm">arrow_forward</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ── Auth Actions ── */}
-          <div className="w-full max-w-md mx-auto flex flex-col gap-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-              <button
-                onClick={handleLoginRedirect}
-                disabled={!selected}
-                className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-base font-semibold transition-all shadow-md ${
-                  selected
-                    ? "bg-primary text-white hover:brightness-110 active:scale-[0.98] cursor-pointer shadow-primary/20"
-                    : "bg-surface-container-high text-on-surface-variant/40 cursor-not-allowed border border-outline-variant/20"
-                }`}
-                aria-label={selected ? `Sign in to ${selectedMode?.title}` : "Select an accessibility profile above to sign in"}
-              >
-                <span className="material-symbols-outlined text-lg">login</span>
-                <span>{t("sign_in", "Sign In")}</span>
-              </button>
-
-              <button
-                onClick={handleSignupRedirect}
-                disabled={!selected}
-                className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-base font-semibold transition-all shadow-md ${
-                  selected
-                    ? "bg-secondary-container text-on-secondary-container hover:brightness-105 active:scale-[0.98] cursor-pointer border border-outline-variant/30"
-                    : "bg-surface-container-high text-on-surface-variant/40 cursor-not-allowed border border-outline-variant/20"
-                }`}
-                aria-label={selected ? `Create account for ${selectedMode?.title}` : "Select an accessibility profile above to sign up"}
-              >
-                <span className="material-symbols-outlined text-lg">person_add</span>
-                <span>{t("create_account", "Create Account")}</span>
-              </button>
-            </div>
-
-            {/* ── Demo Account Button ── */}
-            <div className="w-full flex flex-col gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => handleDemoLogin(selected)}
-                className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl text-sm font-semibold transition-all shadow-sm border-2 border-dashed border-primary/40 bg-primary-fixed/30 hover:bg-primary-fixed/60 hover:border-primary active:scale-[0.99] group cursor-pointer"
-                aria-label={
-                  selected
-                    ? `Explore with demo account for ${selectedMode?.title}`
-                    : "Try AccessAI Demo Account"
-                }
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-                    <span className="material-symbols-outlined !text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                      bolt
-                    </span>
-                  </div>
-                  <div className="text-left">
-                    <div className="font-bold flex items-center gap-2 text-primary leading-snug">
-                      <span>{selected ? `Demo Account: ${selectedMode?.title}` : "Explore with Demo Account"}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-bold uppercase tracking-wider">
-                        {selected ? "Instant" : "Free Access"}
-                      </span>
-                    </div>
-                    <div className="text-xs text-on-surface-variant font-normal">
-                      {selected ? (
-                        <span>
-                          Login as <strong className="text-on-surface font-medium">{demoAccounts.find(d => d.mode === selected)?.name}</strong> ({demoAccounts.find(d => d.mode === selected)?.email})
-                        </span>
+                    <div className="min-w-0">
+                      {selectedDemoAcc ? (
+                        <>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm md:text-base font-bold text-[#0066ff] truncate">
+                              Demo Account: {selectedDemoAcc.title}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-[#dbeafe] text-[#0066ff] text-[10px] font-extrabold uppercase tracking-wider shrink-0">
+                              INSTANT
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 font-medium mt-0.5 truncate">
+                            Login as <strong className="text-slate-900 font-bold">{selectedDemoAcc.name}</strong> ({selectedDemoAcc.email})
+                          </p>
+                        </>
                       ) : (
-                        <span>Instant 1-click access without signup or password</span>
+                        <>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm md:text-base font-bold text-[#0066ff] truncate">
+                              Explore with Demo Account
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-[#dbeafe] text-[#0066ff] text-[10px] font-extrabold uppercase tracking-wider shrink-0">
+                              FREE ACCESS
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 font-normal mt-0.5 truncate">
+                            Instant 1-click access without signup or password
+                          </p>
+                        </>
                       )}
                     </div>
                   </div>
-                </div>
-                <span className="material-symbols-outlined text-primary group-hover:translate-x-1 transition-transform">
-                  arrow_forward
-                </span>
-              </button>
+                  <div className="text-[#0066ff] group-hover:translate-x-1 transition-transform shrink-0 pl-2">
+                    <span className="text-xl font-bold">→</span>
+                  </div>
+                </button>
 
-              <div className="flex items-center justify-between px-1 text-xs text-on-surface-variant/70">
+                {/* Button 2: Sign In Button */}
+                <button
+                  type="button"
+                  onClick={handleLoginRedirect}
+                  disabled={!selected}
+                  className={`px-5 py-3.5 rounded-full font-bold text-sm shadow-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0066ff] focus-visible:ring-offset-2 ${
+                    selected
+                      ? "bg-[#0066ff] hover:bg-blue-600 active:scale-95 text-white"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  }`}
+                  aria-label={selected ? `Sign in to ${selected}` : "Sign In"}
+                >
+                  <span className="material-symbols-outlined !text-lg">login</span>
+                  <span>Sign In</span>
+                </button>
+
+                {/* Button 3: Create Account Button */}
+                <button
+                  type="button"
+                  onClick={handleSignupRedirect}
+                  disabled={!selected}
+                  className={`px-5 py-3.5 rounded-full font-bold text-sm shadow-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0066ff] focus-visible:ring-offset-2 ${
+                    selected
+                      ? "bg-white border border-slate-200 hover:bg-slate-50 active:scale-95 text-[#0f172a]"
+                      : "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed"
+                  }`}
+                  aria-label={selected ? `Create account for ${selected}` : "Create Account"}
+                >
+                  <span className="material-symbols-outlined !text-lg text-[#0f172a]">person_add</span>
+                  <span>Create Account</span>
+                </button>
+              </div>
+
+              {/* Bottom Option: Select from all 3 demo accounts */}
+              <div className="border-t border-[#d8e8fc] pt-2.5 flex items-center justify-between flex-wrap gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => setShowDemoModal(true)}
-                  className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+                  className="flex items-center gap-1.5 font-bold text-[#0066ff] hover:underline cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0066ff] rounded-md px-1"
                 >
-                  <span className="material-symbols-outlined !text-sm">switch_account</span>
+                  <span className="material-symbols-outlined !text-base text-[#0066ff]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    badge
+                  </span>
                   <span>Select from all 3 demo accounts</span>
                 </button>
-                <span className="text-[11px] opacity-75">No login credentials required</span>
+                <span className="text-slate-400 font-normal">
+                  No login credentials required
+                </span>
               </div>
             </div>
 
-            <p className="text-center text-xs text-on-surface-variant/60 max-w-xs mx-auto leading-relaxed mt-1">
-              {selected
-                ? `Ready for ${selectedMode?.title}. Sign in, create account, or jump in with demo.`
-                : "Select an accessibility profile above to Sign In, Create Account, or use Demo Account."}
-            </p>
-          </div>
-        </section>
+            {/* 3. Hero (centered) */}
+            <div className="text-center mb-8 pt-1">
+              <div className="flex items-center justify-center gap-3 mb-2">
+                <SparkleIcon className="w-8 h-8 md:w-9 md:h-9" />
+                <h1 className="text-4xl md:text-5xl font-black text-[#0f172a] tracking-tight">
+                  Welcome to <span className="text-[#0f172a]">Access</span><span className="text-[#0066ff]">AI</span>
+                </h1>
+              </div>
+              <p className="text-base md:text-lg text-slate-600 font-medium max-w-2xl mx-auto leading-relaxed">
+                An AI-powered platform made for your sensory and mobility needs.
+              </p>
+              <p className="text-xs md:text-sm text-slate-500 font-normal mt-1">
+                Choose a mode below to get started.
+              </p>
+            </div>
+
+            {/* 4. Mode cards (3 columns, equal gap) */}
+            <div id="modes-grid" className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-6xl mb-10 items-stretch">
+              {/* Card 1: Blind & Low Vision */}
+              <div
+                onClick={() => selectMode("blind", true)}
+                className={`rounded-2xl p-6 relative flex flex-col justify-between transition-all cursor-pointer ${
+                  selected === "blind"
+                    ? "border-2 border-[#0066ff] bg-white shadow-md"
+                    : "border border-slate-200 bg-white hover:border-blue-300 shadow-xs"
+                }`}
+              >
+                {selected === "blind" && (
+                  <div className="absolute top-4 right-4 z-10">
+                    <span className="px-3 py-1 rounded-full bg-[#0066ff] text-white text-[11px] font-bold tracking-wide shadow-2xs">
+                      ✓ SELECTED
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div className="w-20 h-20 rounded-2xl bg-[#e0efff] flex items-center justify-center text-[#0066ff] mb-5">
+                    <span className="material-symbols-outlined !text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      visibility_off
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-[#0f172a] mb-2">
+                    Blind & Low Vision
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Get voice guidance and read text from your screen.
+                  </p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectMode("blind", true);
+                    }}
+                    className="w-full py-3 px-6 rounded-full bg-[#0066ff] hover:bg-blue-600 active:scale-[0.99] text-white font-bold text-sm shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Start in this Mode</span>
+                    <span className="text-base font-bold">→</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 2: Deaf & Hard of Hearing */}
+              <div
+                onClick={() => selectMode("deaf", false)}
+                className={`rounded-2xl p-6 relative flex flex-col justify-between transition-all cursor-pointer ${
+                  selected === "deaf"
+                    ? "border-2 border-[#10b981] bg-white shadow-md"
+                    : "border border-[#c8f0d8] bg-[#f4fbf6] hover:border-emerald-300 shadow-2xs"
+                }`}
+              >
+                {selected === "deaf" && (
+                  <div className="absolute top-4 right-4 z-10">
+                    <span className="px-3 py-1 rounded-full bg-[#10b981] text-white text-[11px] font-bold tracking-wide shadow-2xs">
+                      ✓ SELECTED
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div className="w-20 h-20 rounded-2xl bg-[#dbf7e6] flex items-center justify-center text-[#10b981] mb-5">
+                    <span className="material-symbols-outlined !text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      hearing
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-[#0f172a] mb-2">
+                    Deaf & Hard of Hearing
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    See real-time captions and language support.
+                  </p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectMode("deaf", false);
+                    }}
+                    className="w-full py-3 px-6 rounded-full bg-[#dbf7e6] hover:bg-[#c3f0d4] active:scale-[0.99] text-[#059669] font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Start in this Mode</span>
+                    <span className="text-base font-bold">→</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 3: Motor & Mobility */}
+              <div
+                onClick={() => selectMode("motor", true)}
+                className={`rounded-2xl p-6 relative flex flex-col justify-between transition-all cursor-pointer ${
+                  selected === "motor"
+                    ? "border-2 border-[#7c3aed] bg-white shadow-md"
+                    : "border border-[#e6dbfd] bg-[#faf7ff] hover:border-purple-300 shadow-2xs"
+                }`}
+              >
+                {selected === "motor" && (
+                  <div className="absolute top-4 right-4 z-10">
+                    <span className="px-3 py-1 rounded-full bg-[#7c3aed] text-white text-[11px] font-bold tracking-wide shadow-2xs">
+                      ✓ SELECTED
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div className="w-20 h-20 rounded-2xl bg-[#efe8ff] flex items-center justify-center text-[#7c3aed] mb-5">
+                    <span className="material-symbols-outlined !text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      accessibility_new
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-[#0f172a] mb-2">
+                    Motor & Mobility
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Use hands-free tracking and customizable controls.
+                  </p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectMode("motor", true);
+                    }}
+                    className="w-full py-3 px-6 rounded-full bg-[#efe8ff] hover:bg-[#e4d7ff] active:scale-[0.99] text-[#7c3aed] font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Start in this Mode</span>
+                    <span className="text-base font-bold">→</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
         )}
       </main>
 
@@ -1159,99 +1363,87 @@ export default function Landing() {
         </div>
       )}
 
-      {/* ── Tiny AccessAI Voice Agent ── */}
-      <div className="fixed bottom-6 left-6 z-[100] flex items-end gap-4 pointer-events-none">
-        {/* Pulsing Orb */}
-        <button
-          onClick={handleOrbClick}
-          className="pointer-events-auto relative w-14 h-14 rounded-full bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all outline-none focus-visible ring-4 ring-primary/20"
-          aria-label="Click to repeat voice instructions"
-          title="Click to repeat instructions"
-        >
-          {/* Pulsing ring animations */}
-          <span className="absolute -inset-1 rounded-full border border-primary/40 animate-ping opacity-75"></span>
-          <span className="absolute -inset-2 rounded-full border border-secondary/20 animate-pulse opacity-50"></span>
+      {/* ── Bottom-left Voice Card ── */}
+      <div className="fixed bottom-6 left-6 z-40 flex items-center gap-3">
+        {/* Round bright-blue mic button with a soft light halo ring */}
+        <div className="p-1 rounded-full bg-blue-100/70 border border-blue-200/50 shadow-sm shrink-0">
+          <button
+            onClick={handleOrbClick}
+            className="w-12 h-12 rounded-full bg-[#0066ff] hover:bg-blue-600 active:scale-95 text-white flex items-center justify-center shadow-md transition-all cursor-pointer"
+            aria-label="Click to repeat voice instructions"
+            title="Click to repeat instructions"
+          >
+            <span className="material-symbols-outlined !text-2xl">mic</span>
+          </button>
+        </div>
 
-          {/* Waveform/Mic Icon */}
-          <span className="material-symbols-outlined !text-2xl animate-pulse" style={{ fontVariationSettings: "'FILL' 1" }}>
-            settings_voice
-          </span>
-        </button>
-
-        {/* Speech Bubble */}
+        {/* White rounded voice card with a soft shadow */}
         {showSpeechBubble && (
-          <div className="pointer-events-auto relative bg-white/95 backdrop-blur-md border border-outline-variant/30 rounded-2xl p-4 shadow-xl max-w-xs md:max-w-sm flex flex-col gap-2 transition-all duration-300">
-            <div className="flex items-start gap-3">
-              {/* Play/Repeat Indicator */}
-              <button
-                onClick={handleOrbClick}
-                className="flex-1 text-left select-none text-xs text-on-surface-variant font-medium leading-relaxed hover:text-primary transition-colors cursor-pointer"
-                title="Click to repeat instructions"
-              >
-                "{textToSpeak}"
-              </button>
-
-              {/* Close Button */}
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-lg max-w-sm flex flex-col gap-2 relative text-slate-800">
+            <div className="flex items-start justify-between gap-4">
+              <p className="text-xs font-medium text-slate-800 leading-snug">
+                &quot;Hello! I am AccessAI. Please choose your preferred language to begin.&quot;
+              </p>
               <button
                 onClick={() => setShowSpeechBubble(false)}
-                className="p-1 rounded-md text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold"
-                aria-label="Dismiss speech bubble"
+                className="text-[#0066ff] hover:text-blue-700 font-bold text-sm leading-none p-0.5 -mt-0.5 -mr-0.5 transition-colors cursor-pointer"
+                aria-label="Close"
               >
-                <span className="material-symbols-outlined !text-sm">close</span>
+                ✕
               </button>
             </div>
-
-            {/* Listening / Live Transcript status */}
-            <div className="border-t border-outline-variant/20 pt-2 flex flex-col gap-1 text-[11px]">
-              <div className="flex items-center gap-1.5 text-on-surface-variant/60">
-                <span className={`w-1.5 h-1.5 rounded-full ${isListening ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
-                <span>{getStatusText()}</span>
-              </div>
-              {transcript && (
-                <div className="text-primary font-medium italic">
-                  You said: "{transcript}"
-                </div>
-              )}
+            <div className="flex items-center gap-2 text-[11px] text-slate-500 font-normal pt-0.5">
+              <span className="w-2 h-2 rounded-full bg-[#10b981] shrink-0"></span>
+              <span>Listening (say &quot;blind mode&quot; or &quot;motor mode&quot;)...</span>
             </div>
-
-            {/* Little bubble arrow */}
-            <div className="absolute left-[-6px] bottom-5 w-3 h-3 bg-white border-l border-b border-outline-variant/30 rotate-45"></div>
           </div>
         )}
       </div>
 
-      {/* ── Debug Panel ── */}
-      <div className="fixed bottom-6 right-6 z-[100] bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 shadow-2xl text-white font-mono text-[11px] w-72 flex flex-col gap-3">
-        <div className="flex items-center justify-between border-b border-slate-700/50 pb-2">
-          <span className="font-bold text-slate-300 text-xs">AccessAI Debug Panel</span>
-          <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
-        </div>
-        <div className="flex flex-col gap-2">
-          <div>
-            <span className="text-slate-400 font-semibold font-sans">Status: </span>
-            <span className="text-green-400 font-bold">{debugStatus}</span>
+      {/* ── Bottom-right Area: Continue Button & Debug Panel ── */}
+      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3.5">
+        {landingStep === "language" && (
+          <button
+            type="button"
+            onClick={() => setLandingStep("mode")}
+            className="px-6 py-3 rounded-2xl bg-[#0066ff] hover:bg-blue-600 active:scale-95 text-white text-xs md:text-sm font-bold shadow-md transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap"
+          >
+            <span>Continue to Mode Selection</span>
+            <span className="text-base font-bold">→</span>
+          </button>
+        )}
+
+        {/* Debug Panel */}
+        <div className="bg-[#101b2b] border border-slate-800 rounded-2xl p-3.5 shadow-2xl text-white font-mono text-[11px] w-52 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+            <span className="font-bold text-white text-xs font-sans tracking-tight">AccessAI Debug Panel</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_8px_rgba(34,197,94,0.9)] animate-pulse shrink-0" />
           </div>
-          <div>
-            <span className="text-slate-400 font-semibold font-sans">Transcript: </span>
-            <span className="text-white">"{debugTranscript || "none"}"</span>
-          </div>
-          <div>
-            <span className="text-slate-400 font-semibold font-sans">Normalized: </span>
-            <span className="text-sky-300">"{debugNormalized || "none"}"</span>
-          </div>
-          <div>
-            <span className="text-slate-400 font-semibold font-sans">Intent: </span>
-            <span className="text-yellow-400 font-bold">{debugIntent}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 font-semibold font-sans">Function: </span>
-            <span className="text-purple-400">{debugFunction}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 font-semibold font-sans">Result: </span>
-            <span className={`font-bold ${debugResult === "SUCCESS" ? "text-green-400" : debugResult === "ERROR" ? "text-red-400" : "text-slate-300"}`}>
-              {debugResult}
-            </span>
+          <div className="flex flex-col gap-1 pt-0.5">
+            <div>
+              <span className="text-white">Status:</span>
+              <span className="text-[#22c55e] font-semibold">{debugStatus || "Listening..."}</span>
+            </div>
+            <div>
+              <span className="text-white">Transcript:</span>
+              <span className="text-[#38bdf8]">"{debugTranscript || "none"}"</span>
+            </div>
+            <div>
+              <span className="text-white">Normalized:</span>
+              <span className="text-[#38bdf8]">"{debugNormalized || "none"}"</span>
+            </div>
+            <div>
+              <span className="text-white">Intent:</span>
+              <span className="text-[#f59e0b] font-semibold">{debugIntent || "None"}</span>
+            </div>
+            <div>
+              <span className="text-white">Function:</span>
+              <span className="text-[#cbd5e1]">{debugFunction || "None"}</span>
+            </div>
+            <div>
+              <span className="text-white">Result:</span>
+              <span className="text-white font-semibold">{debugResult || "None"}</span>
+            </div>
           </div>
         </div>
       </div>

@@ -13,6 +13,7 @@ import { getEffectiveStudentName } from "../utils/studentSession";
 import CareerLearningPaths from "../components/CareerLearningPaths";
 import DegreeGraduationOffer from "../components/DegreeGraduationOffer";
 import RewardStoreModal from "../components/RewardStoreModal";
+import BackButton from "../components/BackButton";
 
 
 // High-quality courses database with guaranteed embeddable YouTube links
@@ -239,6 +240,26 @@ export default function DeafDashboard() {
   const [selectedCourse, setSelectedCourse] = useState(null); // Course details page
   const [activeCoursePlay, setActiveCoursePlay] = useState(null); // Course player
   const [currentLessonIdx, setCurrentLessonIdx] = useState(0);
+
+  const isOverview = activeTab === "home" && !selectedCourse && !activeCoursePlay;
+
+  const handleBackClick = () => {
+    if (activeCoursePlay || selectedCourse) {
+      setActiveCoursePlay(null);
+      setSelectedCourse(null);
+      return;
+    }
+    if (
+      typeof window !== "undefined" &&
+      window.history.state &&
+      typeof window.history.state.idx === "number" &&
+      window.history.state.idx > 0
+    ) {
+      navigate(-1);
+    } else {
+      navigate("/deaf", { replace: true });
+    }
+  };
 
   // Search & filters
   const [search, setSearch] = useState("");
@@ -553,348 +574,396 @@ export default function DeafDashboard() {
   const inputClass = isLight ? "bg-white border border-slate-300 text-slate-900" : "bg-[#080d16] border border-white/10 text-white";
 
   return (
-    <div className={`min-h-screen ${bgClass} font-sans flex relative`}>
-      {/* ── Left Sidebar Navigation (Premium SaaS style) ── */}
-      <aside className={`w-72 border-r flex flex-col justify-between sticky top-0 h-screen z-50 backdrop-blur-xl ${sidebarClass}`}>
-        <div className="p-6">
-          {/* Logo & Language Selector */}
-          <div className="flex items-center justify-between gap-2 mb-6">
-            <div className="flex flex-col gap-1 cursor-pointer" onClick={() => navigate("/deaf")}>
-              <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">AccessAI</span>
-              <span className="self-start text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full">
-                {t("mode_deaf_title", "Deaf Mode")}
+    <div className={`h-screen max-h-screen w-full flex overflow-hidden ${bgClass} font-sans`}>
+      {/* ── Column 1: Left Sidebar Navigation (240px Wide, 36px Items) ── */}
+      <aside className="w-[240px] border-r border-[#E2EDF8] bg-white flex flex-col justify-between sticky top-0 h-screen z-40 flex-shrink-0 overflow-y-auto">
+        <div className="p-3">
+          {/* Logo & Platform Title */}
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-8 h-8 rounded-xl bg-[#0866F5] text-white flex items-center justify-center shadow-md shadow-blue-500/20 flex-shrink-0">
+              <span className="material-symbols-outlined !text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>sign_language</span>
+            </div>
+            <div className="flex flex-col cursor-pointer min-w-0" onClick={() => navigate("/deaf")}>
+              <span className="text-lg font-black text-[#10265C] tracking-tight leading-none truncate">AccessAI</span>
+              <span className="text-[8px] font-black uppercase tracking-wider text-[#0866F5] mt-0.5 truncate">
+                DEAF & HARD OF HEARING
               </span>
             </div>
-            <LanguageSelector compact={true} />
           </div>
 
-          {/* Nav Items */}
-          <nav className="flex flex-col gap-1.5">
-            {[
-              { id: "home", label: t("tab_home", "Home Dashboard"), icon: "home" },
-              { id: "degree-offer", label: t("tab_degree_offer", "Honors Degree (Offer)"), icon: "school" },
-              { id: "career-paths", label: t("tab_career_paths", "Career Paths"), icon: "workspace_premium" },
-              { id: "rewards-store", label: t("tab_rewards_store", "Rewards Store (Redeem)"), icon: "storefront" },
-              { id: "courses", label: t("tab_courses", "Course Library"), icon: "grid_view" },
-              { id: "my-learning", label: t("tab_learning", "My Learning"), icon: "menu_book" },
-              { id: "learn-signs", label: t("tab_practice", "Learn Signs (Interactive)"), icon: "pan_tool" },
-              { id: "ai-tutor", label: t("tab_ai_tutor", "AI Tutor"), icon: "smart_toy" },
-              { id: "activity", label: t("tab_activity", "Activity Dashboard"), icon: "analytics" },
-              { id: "profile", label: t("tab_profile", "Profile & Certificates"), icon: "account_circle" },
-              { id: "settings", label: t("tab_settings", "Accessibility Settings"), icon: "tune" }
-            ].map(item => {
-              const isSelected = activeTab === item.id;
-              return (
+          {/* Navigation Items (36px Height Each) */}
+          <nav className="flex flex-col gap-1">
+            {/* Overview - Active Main Navigation */}
+            <button
+              onClick={() => navigate("/deaf")}
+              className="w-full h-[36px] flex items-center gap-2.5 px-3 py-1 rounded-lg text-left text-xs font-bold bg-[#0866F5] text-white shadow-xs transition-all flex-shrink-0"
+            >
+              <span className="material-symbols-outlined !text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>home</span>
+              <span className="truncate">Overview</span>
+            </button>
+
+            {/* Nova AI Collapsible / Expanded Menu */}
+            <div className="flex flex-col">
+              <button
+                onClick={() => navigate("/deaf/learn-signs")}
+                className="w-full h-[36px] flex items-center justify-between px-3 py-1 rounded-lg text-left text-xs font-bold text-[#10265C] hover:bg-slate-100 transition-all flex-shrink-0"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="material-symbols-outlined !text-lg text-[#0866F5]">auto_awesome</span>
+                  <span className="truncate">Nova AI</span>
+                </div>
+                <span className="material-symbols-outlined !text-base text-slate-400">expand_more</span>
+              </button>
+
+              {/* Inline Sub-Menu Container */}
+              <div className="ml-2.5 my-1 p-1.5 rounded-lg bg-[#EAF4FF] border border-blue-100 flex flex-col gap-0.5">
                 <button
-                  key={item.id}
-                  onClick={() => navigate(`/deaf/${item.id === "home" ? "" : item.id}`)}
-                  className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl text-left text-sm font-semibold transition-all duration-200 ${
-                    isSelected 
-                      ? "bg-primary text-white shadow-md shadow-primary/20" 
-                      : isLight 
-                        ? "text-slate-600 hover:text-slate-900 hover:bg-slate-100" 
-                        : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
-                  }`}
+                  onClick={() => navigate("/deaf/learn-signs")}
+                  className="w-full h-[32px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-bold bg-[#DBEAFE] text-[#0866F5] transition-all"
                 >
-                  <span className="material-symbols-outlined !text-xl" style={{ fontVariationSettings: ` 'FILL' ${isSelected ? 1 : 0}` }}>
-                    {item.icon}
-                  </span>
-                  {item.label}
+                  <span className="material-symbols-outlined !text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>sign_language</span>
+                  <span className="truncate">Nova Sign AI</span>
                 </button>
-              );
-            })}
+                <button
+                  onClick={() => navigate("/deaf/learn-signs")}
+                  className="w-full h-[30px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-semibold text-slate-600 hover:text-[#10265C] hover:bg-blue-100/50 transition-all"
+                >
+                  <span className="material-symbols-outlined !text-sm">view_in_ar</span>
+                  <span className="truncate">3D Sign Language Avatar</span>
+                </button>
+                <button
+                  onClick={() => navigate("/deaf/learn-signs")}
+                  className="w-full h-[30px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-semibold text-slate-600 hover:text-[#10265C] hover:bg-blue-100/50 transition-all"
+                >
+                  <span className="material-symbols-outlined !text-sm">photo_camera</span>
+                  <span className="truncate">Sign Camera</span>
+                </button>
+                <button
+                  onClick={() => navigate("/deaf/learn-signs")}
+                  className="w-full h-[30px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-semibold text-slate-600 hover:text-[#10265C] hover:bg-blue-100/50 transition-all"
+                >
+                  <span className="material-symbols-outlined !text-sm">subtitles</span>
+                  <span className="truncate">Captions & History</span>
+                </button>
+                <button
+                  onClick={() => navigate("/deaf/learn-signs")}
+                  className="w-full h-[30px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-semibold text-slate-600 hover:text-[#10265C] hover:bg-blue-100/50 transition-all"
+                >
+                  <span className="material-symbols-outlined !text-sm">menu_book</span>
+                  <span className="truncate">Sign Guide</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Standard Nav Links (36px Height Each) */}
+            {[
+              { id: "rewards-store", label: "Reward Store (Redeem)", icon: "storefront" },
+              { id: "courses", label: "Course Library", icon: "grid_view" },
+              { id: "my-learning", label: "My Learning", icon: "menu_book" },
+              { id: "learn-signs", label: "Sign Practice", icon: "signal_cellular_alt" },
+              { id: "ai-tutor", label: "AI Tutor", icon: "chat_bubble" },
+              { id: "activity", label: "Activity Dashboard", icon: "analytics" },
+              { id: "profile", label: "Profile & Certificates", icon: "account_circle" },
+              { id: "settings", label: "Accessibility Settings", icon: "tune" }
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => navigate(`/deaf/${item.id === "home" ? "" : item.id}`)}
+                className="w-full h-[36px] flex items-center gap-2.5 px-3 py-1 rounded-lg text-left text-xs font-semibold text-slate-700 hover:text-[#10265C] hover:bg-slate-100 transition-all flex-shrink-0"
+              >
+                <span className="material-symbols-outlined !text-lg text-[#0866F5]">{item.icon}</span>
+                <span className="truncate">{item.label}</span>
+              </button>
+            ))}
           </nav>
         </div>
 
-        {/* User profile section at footer */}
-        <div className="p-6 border-t border-slate-200/50 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-secondary flex items-center justify-center font-bold text-white text-sm">
+        {/* User profile section at footer (Always visible) */}
+        <div className="p-3 border-t border-slate-200 flex items-center justify-between flex-shrink-0 bg-white">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-[#0866F5] flex items-center justify-center font-bold text-white text-xs shadow-xs flex-shrink-0">
               VG
             </div>
-            <div>
-              <p className="text-xs font-semibold">{user?.displayName || "Vrusha Goyal"}</p>
-              <p className="text-[10px] text-slate-500">{t("deaf_role", "Deaf Analyst")}</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-[#10265C] leading-none truncate">{user?.displayName || "Vrusha Goyal"}</p>
+              <p className="text-[9px] text-slate-500 mt-0.5 truncate">{t("deaf_role", "Deaf Accessibility Analyst")}</p>
             </div>
           </div>
-          <button onClick={logout} className="p-2 rounded-lg hover:bg-red-500/10 text-slate-450 hover:text-red-500 transition-colors" title={t("sign_out", "Sign out")}>
-            <span className="material-symbols-outlined !text-xl">logout</span>
+          <button onClick={logout} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors flex-shrink-0" title={t("sign_out", "Sign out")}>
+            <span className="material-symbols-outlined !text-lg">logout</span>
           </button>
         </div>
       </aside>
 
-      {/* ── Main Content Area ── */}
-      <main className="flex-1 min-h-screen overflow-y-auto p-8 relative z-10">
+      {/* ── Column 2: Flexible Main Area (min-width: 0) ── */}
+      <main className="flex-1 min-w-0 h-screen max-h-screen overflow-y-auto p-3.5 md:p-4 bg-[#F4F8FC] flex flex-col justify-between gap-3">
+
+        {/* ── Header Inside Main Column (Never Covered) ── */}
+        <div className="flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            {!isOverview && (
+              <BackButton
+                fallback="/deaf"
+                onClick={handleBackClick}
+              />
+            )}
+            <h1 className="text-lg md:text-xl font-black text-[#10265C] tracking-tight truncate">
+              Hello, {user?.displayName || "Vrusha Goyal"}!
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-shrink-0">
+            <div className="bg-white border border-slate-200 rounded-full px-3 py-1 flex items-center gap-1.5 shadow-xs cursor-pointer text-xs font-bold text-slate-700 hover:border-blue-300">
+              <span className="material-symbols-outlined !text-sm text-[#0866F5]">language</span>
+              <span>Eng English</span>
+              <span className="material-symbols-outlined !text-sm text-slate-400">expand_more</span>
+            </div>
+
+            <div className="w-8 h-8 rounded-full bg-[#10265C] text-white flex items-center justify-center shadow-xs cursor-pointer">
+              <span className="material-symbols-outlined !text-lg">person</span>
+            </div>
+          </div>
+        </div>
 
         {/* 1. HOME DASHBOARD VIEW */}
         {activeTab === "home" && !selectedCourse && !activeCoursePlay && (
-          <div className="max-w-6xl mx-auto flex flex-col gap-8 animate-fadeIn">
-            {/* Header welcome banner */}
-            <div className="bg-gradient-to-r from-primary/10 to-secondary/5 border border-slate-200/50 p-8 rounded-3xl backdrop-blur relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div className="flex flex-col gap-2 max-w-xl">
-                <h1 className={`text-3xl font-extrabold tracking-tight ${textTitleClass}`}>
-                  {t("greeting_user", "Hello, {name}!").replace("{name}", user?.displayName || "Vrusha")}
-                </h1>
-                <p className="text-slate-650 text-sm leading-relaxed">
-                  {t("deaf_welcome_msg", "Welcome to AccessAI e-learning! Expand your signing vocabulary and ASL syntax. Everything is adapted visually for you, no audio required.")}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <WalletBadge />
-                <div className={`${cardClass} px-5 py-3.5 rounded-2xl flex flex-col items-center`}>
-                  <span className="text-2xl font-bold text-yellow-550">{studyStreak}🔥</span>
-                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-1">
-                    {t("day_streak", "Day Streak")}
-                  </span>
-                </div>
-                <div className={`${cardClass} px-5 py-3.5 rounded-2xl flex flex-col items-center`}>
-                  <span className="text-2xl font-bold text-primary">{studyMinutesToday}m</span>
-                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-1">
-                    {t("spent_today", "Spent Today")}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── 3D AI Sign Language Assistant Hero Banner ── */}
-            <div className={`p-6 rounded-3xl border ${isLight ? "bg-gradient-to-r from-cyan-500/10 via-indigo-500/10 to-purple-500/10 border-cyan-200" : "bg-gradient-to-r from-cyan-950/40 via-indigo-950/40 to-slate-900/60 border-cyan-500/30"} shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6`}>
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/30 flex-shrink-0">
-                  <span className="material-symbols-outlined !text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                    sign_language
-                  </span>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className={`text-lg font-bold tracking-tight ${textTitleClass}`}>
-                      {t("nova_banner_title", "Nova AI • 3D Sign Language Avatar")}
-                    </h2>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-600 border border-cyan-500/30">
-                      {t("nova_persistent_badge", "Persistent Bot")}
+          <div className="flex flex-col gap-3 my-auto w-full min-w-0 animate-fadeIn">
+            
+            {/* ── Top Banner Cards Row ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-w-0">
+              {/* Nova AI Card */}
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-[#EAF5FF] to-[#E0F2FE] border border-[#08BFD0]/40 shadow-xs flex items-center justify-between gap-2.5 min-w-0 overflow-hidden">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-[#0866F5] flex items-center justify-center text-white shadow-xs flex-shrink-0">
+                    <span className="material-symbols-outlined !text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      sign_language
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1 max-w-xl">
-                    {t("nova_banner_desc", "Nova is now docked in the bottom-right corner across all tabs. Enable your camera anytime to sign commands (☝️ Courses, ✌️ Home, 🤟 Practice) and navigate effortlessly.")}
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h2 className="text-[14px] font-bold text-[#10265C] truncate">
+                        Nova AI – 3D Sign Language Avatar
+                      </h2>
+                      <span className="text-[8px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-cyan-100 text-[#08BFD0] border border-cyan-200 flex-shrink-0">
+                        BOT
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 font-medium truncate">Courses · Home · Practice</p>
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setActiveTab("learn-signs");
                     navigate("/deaf/learn-signs");
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl bg-[#0866F5] text-white text-xs font-bold shadow-xs hover:bg-blue-600 transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer flex-shrink-0"
                 >
-                  <span className="material-symbols-outlined !text-base">pan_tool</span>
-                  <span>{t("open_sign_arena", "Open Sign Arena")}</span>
+                  <span>Open Sign Arena</span>
                 </button>
               </div>
-            </div>
 
-            {/* ── Rewards Marketplace Hero Banner ── */}
-            <div
-              onClick={() => {
-                setActiveTab("rewards-store");
-                navigate("/deaf/rewards-store");
-              }}
-              className={`p-6 rounded-3xl border ${
-                isLight
-                  ? "bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-600/10 border-amber-300/80"
-                  : "bg-gradient-to-r from-amber-950/40 via-yellow-950/40 to-slate-900/60 border-amber-500/30"
-              } shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6 cursor-pointer hover:border-amber-400 transition-all`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30 flex-shrink-0">
-                  <span className="material-symbols-outlined !text-3xl">storefront</span>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className={`text-lg font-bold tracking-tight ${textTitleClass}`}>
-                      Rewards Store • Buy Courses & Perks
-                    </h2>
-                    <span className="text-[10px] px-2.5 py-0.5 rounded-full font-extrabold uppercase tracking-wider bg-amber-500/20 text-amber-700 border border-amber-500/40">
-                      ⭐ {availablePoints !== undefined ? availablePoints : 550} PTS Available
-                    </span>
+              {/* Reward Store Card */}
+              <div
+                onClick={() => {
+                  setActiveTab("rewards-store");
+                  navigate("/deaf/rewards-store");
+                }}
+                className="p-3 rounded-2xl bg-[#FFF8F0] border border-orange-200 shadow-xs flex items-center justify-between gap-2.5 cursor-pointer hover:border-orange-300 transition-all min-w-0 overflow-hidden"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-xs flex-shrink-0">
+                    <span className="material-symbols-outlined !text-xl">storefront</span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1 max-w-xl">
-                    Redeem your earned course and degree reward points for advanced AI courses, WCAG masterclasses, VIP AI Tutor passes, and physical holographic diplomas.
-                  </p>
+                  <div className="min-w-0">
+                    <h2 className="text-xs font-extrabold text-[#10265C] truncate">
+                      Reward Store
+                    </h2>
+                    <p className="text-[10px] text-slate-500 mt-0.5 font-medium truncate">Redeem Courses & Diplomas</p>
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveTab("rewards-store");
-                    navigate("/deaf/rewards-store");
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-amber-600 text-white text-xs font-bold shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined !text-base">shopping_bag</span>
-                  <span>Explore Rewards Store</span>
-                </button>
+                <span className="material-symbols-outlined !text-lg text-slate-400 flex-shrink-0">chevron_right</span>
               </div>
             </div>
 
-            {/* Grid metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Daily Goal Card */}
-              <div className={`${cardClass} p-6 rounded-2xl flex flex-col gap-4`}>
-                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary">workspace_premium</span>
-                  {t("daily_goals", "Daily Goals")}
-                </h3>
-                <div className="flex justify-between items-center text-xs">
-                  <span>{t("today_goal_label", "Today's goal: 30 minutes")}</span>
-                  <span className="text-primary font-bold">{t("done_pct", "83% Done")}</span>
+            {/* ── Stats Cards Row ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-w-0">
+              {/* Daily Goals Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-xs min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-[#0866F5]/10 text-[#0866F5] flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined !text-lg">explore</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-[#10265C] truncate">DAILY GOALS</h3>
+                    <p className="text-[11px] text-slate-600 mt-0.5 font-medium truncate">Today's goal: 30 minutes</p>
+                  </div>
                 </div>
-                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full" style={{ width: "83%" }}></div>
+
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="font-bold text-slate-400">Progress</span>
+                    <span className="font-bold text-[#0866F5]">83% Done</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#0866F5] rounded-full" style={{ width: "83%" }}></div>
+                  </div>
                 </div>
               </div>
 
               {/* Progress Overview Card */}
-              <div className={`${cardClass} p-6 rounded-2xl flex flex-col gap-4`}>
-                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
-                  <span className="material-symbols-outlined text-green-500">task_alt</span>
-                  {t("progress_overview", "Progress Overview")}
-                </h3>
-                <div className="flex justify-between items-center text-xs">
-                  <span>{t("completed_courses_label", "2 Completed Courses")}</span>
-                  <span className="text-green-600 font-bold">{t("average_progress", "50% Average")}</span>
-                </div>
-                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-green-500 rounded-full" style={{ width: "50%" }}></div>
-                </div>
-              </div>
-
-              {/* Quick AI Tutor Card */}
-              <div className="bg-gradient-to-br from-primary/10 to-secondary/5 border border-primary/20 p-6 rounded-2xl flex flex-col justify-between gap-4">
-                <div>
-                  <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
-                    <span className="material-symbols-outlined text-secondary">smart_toy</span>
-                    {t("ai_study_companion", "AI Study Companion")}
-                  </h3>
-                  <p className="text-xs text-slate-550 mt-2">
-                    {t("ai_companion_desc", "Generate a custom visual quiz or ask grammar questions instantly.")}
-                  </p>
-                </div>
-                <button onClick={() => setActiveTab("ai-tutor")} className="w-full py-2 bg-primary text-white font-semibold text-xs rounded-xl hover:brightness-110 transition-all">
-                  {t("chat_with_tutor", "Chat with AI Tutor")}
-                </button>
-              </div>
-            </div>
-
-            {/* Continue Learning */}
-            <div className="flex flex-col gap-4">
-              <h2 className={`text-xl font-bold tracking-tight ${textTitleClass}`}>
-                {t("continue_learning", "Continue Learning")}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {courses.filter(c => purchasedIds.includes(c.id)).map((course, index) => {
-                  const pct = progress[course.id]?.completion || 0;
-                  const isFocused = index === focusedIndex;
-                  const localizedCourse = getCourseText(course);
-                  return (
-                    <div
-                      key={course.id}
-                      onClick={() => {
-                        setFocusedIndex(index);
-                        setActiveCoursePlay(course);
-                        setCurrentLessonIdx(0);
-                      }}
-                      className={`${cardClass} p-6 rounded-2xl flex flex-col justify-between gap-4 transition-all relative ${
-                        isFocused
-                          ? "ring-4 ring-cyan-400 ring-offset-2 ring-offset-slate-900 border-cyan-400 shadow-2xl shadow-cyan-500/30 scale-[1.02] z-20"
-                          : ""
-                      }`}
-                    >
-                      {/* Spatial Accessibility Cursor Focus Badge */}
-                      {isFocused && (
-                        <div className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full bg-cyan-500 text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg shadow-cyan-500/50 animate-pulse z-30">
-                          <span>👉 {t("focused_to_select", "Focused (👍 to Select)")}</span>
-                        </div>
-                      )}
-
-                      <div className="mt-2">
-                        <span className="text-[10px] uppercase font-bold text-primary px-2 py-0.5 bg-primary/10 border border-primary/20 rounded">
-                          {t(`${course.level?.toLowerCase()}_badge`, course.level)}
-                        </span>
-                        <h3 className={`text-base font-bold mt-2 ${textTitleClass}`}>{localizedCourse.title}</h3>
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{localizedCourse.description}</p>
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-1.5 text-xs">
-                          <span>{t("course_progress", "Course Progress")}</span>
-                          <span className="text-primary font-bold">{pct}%</span>
-                        </div>
-                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-4">
-                          <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }}></div>
-                        </div>
-                        <button onClick={() => { setActiveCoursePlay(course); setCurrentLessonIdx(0); }} className={`w-full py-2.5 text-xs font-bold rounded-xl transition-all ${
-                          isFocused ? "bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/40" : "bg-primary text-white"
-                        }`}>
-                          {t("resume_course", "Resume Learning")}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Recommended & Notifications */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Recommendations */}
-              <div className="flex flex-col gap-4">
-                <h2 className={`text-xl font-bold tracking-tight ${textTitleClass}`}>
-                  {t("recommended_for_you", "Recommended for you")}
-                </h2>
-                <div className="flex flex-col gap-3">
-                  {courses.filter(c => !purchasedIds.includes(c.id)).slice(0, 2).map(course => (
-                    <div key={course.id} onClick={() => setSelectedCourse(course)} className={`${cardClass} p-4 flex gap-4 cursor-pointer transition-all hover:border-primary/45`}>
-                      <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
-                        <span className="material-symbols-outlined !text-2xl">sign_language</span>
-                      </div>
-                      <div>
-                        <h4 className={`text-sm font-bold line-clamp-1 ${textTitleClass}`}>
-                          {getCourseText(course).title}
-                        </h4>
-                        <p className="text-xs text-slate-500 mt-1">{course.instructor} · {course.duration}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Notifications */}
-              <div className={`${cardClass} p-6 rounded-2xl flex flex-col gap-4`}>
-                <h3 className="font-bold text-sm uppercase tracking-wider">
-                  {t("system_notifications", "System Notifications")}
-                </h3>
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-start gap-3 text-xs border-b border-slate-250/20 pb-2">
-                    <span className="w-2 h-2 rounded-full bg-primary mt-1"></span>
-                    <div>
-                      <p className="font-semibold text-slate-700">New ASL course released!</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Explore advanced classifiers & syntaxes.</p>
-                    </div>
+              <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-xs min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined !text-lg">check_circle</span>
                   </div>
-                  <div className="flex items-start gap-3 text-xs">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1"></span>
-                    <div>
-                      <p className="font-semibold text-slate-700">Tutor AI is updated</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Now supports homework uploads and interactive quizzes.</p>
-                    </div>
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-[#10265C] truncate">PROGRESS OVERVIEW</h3>
+                    <p className="text-[11px] text-slate-600 mt-0.5 font-medium truncate">2 Completed Courses</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="font-bold text-slate-400">Average</span>
+                    <span className="font-bold text-emerald-600">50% Average</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: "50%" }}></div>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* ── Continue Learning Section ── */}
+            <div className="flex flex-col gap-2 min-w-0">
+              <h2 className="text-sm font-bold text-[#10265C] truncate">Continue Learning</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-w-0">
+                {/* Course Card 1 (Focused) */}
+                <div className="bg-white border-2 border-[#08BFD0] rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-xs relative min-w-0 overflow-hidden">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="bg-[#08BFD0] text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-xs truncate">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse flex-shrink-0" />
+                      <span className="truncate">FOCUSED ✌️ TO SELECT</span>
+                    </span>
+                    <span className="text-xs font-black text-[#0866F5] flex-shrink-0">75%</span>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-bold text-[#10265C] truncate">American Sign Language Alphabet</h3>
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+                      <div className="h-full bg-[#0866F5] rounded-full" style={{ width: "75%" }}></div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      const target = courses.find(c => c.id === "course-1") || courses[0];
+                      setActiveCoursePlay(target);
+                      setCurrentLessonIdx(0);
+                    }}
+                    className="w-full py-1.5 bg-[#08BFD0] hover:bg-[#07a7b6] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span>Resume Course</span>
+                    <span className="material-symbols-outlined !text-sm">chevron_right</span>
+                  </button>
+                </div>
+
+                {/* Course Card 2 (Compact) */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-xs min-w-0 overflow-hidden">
+                  <div>
+                    <span className="bg-[#EAF4FF] text-[#0866F5] text-[9px] font-bold px-2 py-0.5 rounded-md uppercase">
+                      BEGINNER
+                    </span>
+                    <h3 className="text-xs font-bold text-[#10265C] mt-1 truncate">Basic ASL Sentences & Greetings</h3>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#0866F5] rounded-full" style={{ width: "25%" }}></div>
+                    </div>
+                    <span className="text-xs font-bold text-[#0866F5] flex-shrink-0">25%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── RECOMMENDED FOR YOU ── */}
+            <div className="flex flex-col gap-2 min-w-0">
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#10265C] truncate">RECOMMENDED FOR YOU</h2>
+              
+              <div className="flex flex-col gap-2 min-w-0">
+                {courses.filter(c => !purchasedIds.includes(c.id)).slice(0, 2).map((course) => (
+                  <div
+                    key={course.id}
+                    onClick={() => setSelectedCourse(course)}
+                    className="bg-white border border-slate-200 rounded-2xl p-2.5 px-3 flex items-center justify-between gap-3 cursor-pointer hover:border-blue-300 shadow-xs transition-all min-w-0 overflow-hidden"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-[#EAF4FF] text-[#0866F5] flex items-center justify-center flex-shrink-0">
+                        <span className="material-symbols-outlined !text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>sign_language</span>
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-[#10265C] truncate">{getCourseText(course).title}</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5 font-medium truncate">{course.instructor} · {course.duration}</p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined !text-lg text-slate-400 flex-shrink-0">chevron_right</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── More for You (Fully Visible at Bottom) ── */}
+            <div className="flex flex-col gap-2 min-w-0">
+              <h2 className="text-xs font-bold text-[#10265C] truncate">More for You</h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 min-w-0">
+                {/* Mint Card */}
+                <div className="bg-[#ECFDF5] border border-emerald-200 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-xs cursor-pointer hover:border-emerald-300 transition-all min-w-0 overflow-hidden">
+                  <div className="flex items-start justify-between">
+                    <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs flex-shrink-0">
+                      <span className="material-symbols-outlined !text-sm">campaign</span>
+                    </div>
+                    <span className="material-symbols-outlined !text-base text-emerald-600 flex-shrink-0">chevron_right</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-[#10265C] truncate">New ASL course released!</h4>
+                    <p className="text-[10px] text-slate-600 mt-0.5 font-medium line-clamp-2">Explore new lessons and grow your skills.</p>
+                  </div>
+                </div>
+
+                {/* Lavender Card */}
+                <div className="bg-[#F5F3FF] border border-purple-200 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-xs cursor-pointer hover:border-purple-300 transition-all min-w-0 overflow-hidden">
+                  <div className="flex items-start justify-between">
+                    <div className="w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-xs flex-shrink-0">
+                      <span className="material-symbols-outlined !text-sm">psychology</span>
+                    </div>
+                    <span className="material-symbols-outlined !text-base text-purple-600 flex-shrink-0">chevron_right</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-[#10265C] truncate">Advanced Classified Tutor AI</h4>
+                    <p className="text-[10px] text-slate-600 mt-0.5 font-medium line-clamp-2">Personalized support for better learning.</p>
+                  </div>
+                </div>
+
+                {/* Light Blue Card */}
+                <div className="bg-[#F0F9FF] border border-sky-200 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-xs cursor-pointer hover:border-sky-300 transition-all min-w-0 overflow-hidden">
+                  <div className="flex items-start justify-between">
+                    <div className="w-7 h-7 rounded-full bg-[#0866F5] text-white flex items-center justify-center shadow-xs flex-shrink-0">
+                      <span className="material-symbols-outlined !text-sm">download</span>
+                    </div>
+                    <span className="material-symbols-outlined !text-base text-[#0866F5] flex-shrink-0">chevron_right</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-[#10265C] truncate">Update</h4>
+                    <p className="text-[10px] text-slate-600 mt-0.5 font-medium line-clamp-2">Latest features & improvements.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -2052,8 +2121,9 @@ export default function DeafDashboard() {
         )}
       </main>
 
-      {/* ── Persistent Floating 3D Sign Avatar Bot (Accessible Across All Tabs) ── */}
+      {/* ── Column 3: Dedicated 300px Right Panel (Nova Sign AI Avatar Bot) ── */}
       <SignAvatarAssistant
+        embedded={true}
         isLight={isLight}
         onNavigate={(tab) => {
           setActiveTab(tab);

@@ -13,6 +13,7 @@ import { getEffectiveStudentName } from "../utils/studentSession";
 import CareerLearningPaths from "../components/CareerLearningPaths";
 import DegreeGraduationOffer from "../components/DegreeGraduationOffer";
 import RewardStoreModal from "../components/RewardStoreModal";
+import BackButton from "../components/BackButton";
 
 // ── MOCK DATA MATCHING PLATFORM ──
 const MOCK_COURSES = [
@@ -437,6 +438,27 @@ export default function MotorDashboard() {
   const [selectedCourse, setSelectedCourse] = useState(null); // Course detail overlay
   const [activeCoursePlay, setActiveCoursePlay] = useState(null); // Player view
   const [currentLessonIdx, setCurrentLessonIdx] = useState(0);
+
+  const isOverview = activeTab === "home" && !selectedCourse && !activeCoursePlay;
+
+  const handleBackClick = () => {
+    if (activeCoursePlay || selectedCourse) {
+      setActiveCoursePlay(null);
+      setSelectedCourse(null);
+      speak("Returned to previous course view.");
+      return;
+    }
+    if (
+      typeof window !== "undefined" &&
+      window.history.state &&
+      typeof window.history.state.idx === "number" &&
+      window.history.state.idx > 0
+    ) {
+      navigate(-1);
+    } else {
+      navigate("/motor", { replace: true });
+    }
+  };
 
   const isCourseUnlocked = (cId) => {
     return purchasedIds.includes(cId) || (walletUnlockedItems && walletUnlockedItems.includes(cId));
@@ -1183,6 +1205,12 @@ export default function MotorDashboard() {
         {/* Top Navbar Status indicators */}
         <div className={`flex justify-between items-center ${cardClass} p-4 rounded-2xl`}>
           <div className="flex gap-4 items-center flex-wrap">
+            {!isOverview && (
+              <BackButton
+                fallback="/motor"
+                onClick={handleBackClick}
+              />
+            )}
             {voiceActive && listening && (
               <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />

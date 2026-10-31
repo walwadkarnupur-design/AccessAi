@@ -29,6 +29,7 @@ export default function SignLearning({ isLight, cardClass, innerCardClass, textT
   const streamRef = useRef(null);
   const lastVideoTimeRef = useRef(-1);
   const correctTimerRef = useRef(null);
+  const isCameraStartingRef = useRef(false);
 
   const targetSign = TEACHABLE_SIGNS[currentSignIndex];
 
@@ -88,21 +89,69 @@ export default function SignLearning({ isLight, cardClass, innerCardClass, textT
 
   // Start Camera
   const startCamera = async () => {
+    if (isCameraStartingRef.current || streamRef.current) {
+      console.log("Camera is already starting or active.");
+      return;
+    }
+
+    setModelError(null);
+    setSuccessMessage("");
+    setIsCorrectGesture(false);
+
+    if (typeof navigator === "undefined" || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+      const msg = "Camera API is not supported by your browser or is blocked in an insecure (non-HTTPS) context.";
+      console.error("Camera access error: UnsupportedContext", msg);
+      setModelError(msg);
+      return;
+    }
+
+    isCameraStartingRef.current = true;
+
     try {
-      setSuccessMessage("");
-      setIsCorrectGesture(false);
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: "user" }
+        video: true,
+        audio: false
       });
+
+      streamRef.current = stream;
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.autoplay = true;
+        videoRef.current.playsInline = true;
+        videoRef.current.muted = true;
+
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.error("Video play() error:", playErr?.name, playErr?.message, playErr);
+        }
         videoRef.current.addEventListener("loadeddata", predictLoop);
       }
-      streamRef.current = stream;
+
       setCameraActive(true);
     } catch (err) {
-      console.error("Error accessing camera:", err);
-      alert("Could not access webcam. Please ensure you have granted camera permissions.");
+      console.error("Camera access error:", err?.name, err?.message, err);
+
+      let errorMessage = "";
+      const errorName = err?.name || "";
+
+      if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+        errorMessage = "Camera access denied. Please allow camera permissions in your browser's site settings and reload the page.";
+      } else if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+        errorMessage = "No camera found. Please connect a camera device and try again.";
+      } else if (errorName === "NotReadableError" || errorName === "TrackStartError") {
+        errorMessage = "Camera is currently in use by another application or system process.";
+      } else if (errorName === "OverconstrainedError") {
+        errorMessage = "Camera constraints could not be satisfied by your video device.";
+      } else {
+        errorMessage = `Unable to access camera (${errorName || "Error"}): ${err?.message || "Unknown error"}`;
+      }
+
+      setModelError(errorMessage);
+      stopCamera();
+    } finally {
+      isCameraStartingRef.current = false;
     }
   };
 
@@ -122,6 +171,7 @@ export default function SignLearning({ isLight, cardClass, innerCardClass, textT
     setCameraActive(false);
     setDetectedGesture("None");
     setDetectionConfidence(0);
+    isCameraStartingRef.current = false;
   };
 
   // Prediction Loop

@@ -39,9 +39,9 @@ export default function CertificateModal({
   const tokenId = certificateData.tokenId;
   const certHash = certificateData.certificateHash || certificateData.pdfHash;
   const pointsAwarded = certificateData.pointsAwarded ?? (isTopic ? 0 : 50);
-  const downloadUrl = `http://127.0.0.1:5000/certificate/download/${certId}`;
-  const viewUrl = `http://127.0.0.1:5000/certificate/view/${certId}`;
-  const imageUrl = `http://127.0.0.1:5000/certificate/image/${certId}`;
+  const downloadUrl = `/certificate/download/${certId}`;
+  const viewUrl = `/certificate/view/${certId}`;
+  const imageUrl = `/certificate/image/${certId}`;
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(certId);
