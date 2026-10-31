@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { FilesetResolver, GestureRecognizer } from "@mediapipe/tasks-vision";
-import Avatar3DCanvas from "./Avatar3DCanvas";
 import { useLanguage } from "../context/LanguageContext";
 
 // Supported Command Sign Mapping (Preserving all Legacy Gestures & Quick Commands)
-const SIGN_COMMANDS = [
+export const SIGN_COMMANDS = [
   {
     gesture: "GUN_LEFT",
     signName: "Left Gun Sign",
@@ -68,12 +67,12 @@ const SIGN_COMMANDS = [
   {
     gesture: "Open_Palm",
     signName: "Open Palm / Wave",
-    actionName: "Help & Commands",
+    actionName: "Sign Guide & Help",
     icon: "✋",
-    targetTab: "help",
-    description: "Asks AI Avatar for help and displays available sign commands",
+    targetTab: "sign-guide",
+    description: "Opens the full Sign Guide in the left sidebar",
     avatarPose: "wave",
-    speechText: "Hello! Here are the sign commands I can recognize."
+    speechText: "Opening the Sign Guide."
   },
   {
     gesture: "SCROLL_UP",
@@ -414,8 +413,8 @@ class IntegratedGestureController {
         }
       },
       'OPEN_PALM': () => {
-        if (typeof this.callbacks.setActiveTab === 'function') {
-          this.callbacks.setActiveTab('guide');
+        if (typeof this.callbacks.onNavigate === 'function') {
+          this.callbacks.onNavigate('sign-guide');
         }
       }
     };
@@ -502,12 +501,24 @@ export default function SignAvatarAssistant({
   onSelect,
   isLight = false,
   className = "",
-  embedded = false
+  embedded = false,
+  isPracticeMode = false
 }) {
   const { t, language } = useLanguage();
   const [isOpen, setIsOpen] = useState(true); // Floating window open/close state
   const [isMinimized, setIsMinimized] = useState(false); // Mini mode vs full window
-  const [activeTab, setActiveTab] = useState("camera"); // 'camera' | 'chat' | 'guide'
+  const [isEmbeddedMinimized, setIsEmbeddedMinimized] = useState(isPracticeMode);
+  const [activeTab, setActiveTab] = useState("camera"); // 'camera' | 'chat'
+
+  // When practice mode opens, automatically minimize Nova Sign AI into the bottom button
+  useEffect(() => {
+    if (isPracticeMode) {
+      setIsEmbeddedMinimized(true);
+      if (cameraActive) {
+        stopCamera();
+      }
+    }
+  }, [isPracticeMode]);
   
   const [cameraActive, setCameraActive] = useState(false);
   const [modelLoading, setModelLoading] = useState(true);
@@ -1273,6 +1284,27 @@ export default function SignAvatarAssistant({
     });
   };
 
+  if (embedded && isEmbeddedMinimized) {
+    return (
+      <div className="fixed bottom-6 right-6 z-50">
+        <button
+          type="button"
+          onClick={() => setIsEmbeddedMinimized(false)}
+          className="group py-2.5 px-4 rounded-full bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 text-white text-xs font-bold shadow-2xl shadow-cyan-500/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer border-2 border-cyan-400/50"
+          title="Open Nova Sign AI Assistant"
+        >
+          <span className="material-symbols-outlined !text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+            sign_language
+          </span>
+          <span className="font-bold tracking-wide font-headline">Nova Sign AI</span>
+          {cameraActive && (
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 border border-slate-950 animate-pulse" />
+          )}
+        </button>
+      </div>
+    );
+  }
+
   if (embedded) {
     return (
       <aside className={`w-[300px] h-screen max-h-screen bg-slate-950 text-slate-100 border-l border-slate-800/80 flex flex-col justify-between flex-shrink-0 overflow-hidden relative font-sans ${className}`}>
@@ -1298,8 +1330,9 @@ export default function SignAvatarAssistant({
               </div>
             </div>
 
-            {/* Speaker Toggle */}
-            <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {/* Speaker Toggle */}
               <button
                 type="button"
                 onClick={() => {
@@ -1323,14 +1356,23 @@ export default function SignAvatarAssistant({
                   {audioVoiceEnabled ? "volume_up" : "volume_off"}
                 </span>
               </button>
+
+              {/* Minimize into button */}
+              <button
+                type="button"
+                onClick={() => setIsEmbeddedMinimized(true)}
+                className="p-1 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                title="Minimize Nova Sign AI"
+              >
+                <span className="material-symbols-outlined !text-xs">remove</span>
+              </button>
             </div>
           </div>
 
-          {/* 3D WebGL Avatar Mini Stage */}
-          <div className="w-full h-44 relative bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-b border-cyan-500/20 flex flex-col justify-between p-2 flex-shrink-0 overflow-hidden">
-            {/* Status Indicator */}
-            <div className="w-full flex items-center justify-between z-10">
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/85 border border-cyan-500/30 text-[9px]">
+          {/* Status Indicator & Live Caption Bar */}
+          <div className="px-3 py-2 bg-slate-900/90 border-b border-cyan-500/20 flex flex-col gap-1.5 flex-shrink-0">
+            <div className="w-full flex items-center justify-between">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950/80 border border-cyan-500/30 text-[9px]">
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   avatarMood === "executing" ? "bg-amber-400 animate-ping" :
                   avatarMood === "recognized" ? "bg-cyan-400 animate-bounce" :
@@ -1353,18 +1395,8 @@ export default function SignAvatarAssistant({
               )}
             </div>
 
-            {/* Embedded Three.js 3D Avatar */}
-            <div className="w-full h-36 relative flex items-center justify-center -my-1">
-              <Avatar3DCanvas
-                avatarAction={avatarAction}
-                isSpeaking={isSpeaking}
-                status={avatarMood}
-                className="w-full h-full"
-              />
-            </div>
-
             {/* Mini Live Captions */}
-            <div className="w-full z-10 px-2.5 py-1 rounded-xl bg-slate-900/90 border border-cyan-500/30 text-[10px] font-semibold text-white truncate flex items-center gap-1">
+            <div className="w-full px-2.5 py-1 rounded-lg bg-slate-950/70 border border-white/5 text-[10px] font-semibold text-white truncate flex items-center gap-1.5">
               <span className="text-cyan-400 text-xs">💬</span>
               <span className="truncate">{captionText}</span>
             </div>
@@ -1374,8 +1406,7 @@ export default function SignAvatarAssistant({
           <div className="flex border-b border-slate-800 bg-slate-900/80 px-1 pt-1 gap-0.5 flex-shrink-0">
             {[
               { id: "camera", label: "Sign Camera", icon: "videocam" },
-              { id: "chat", label: "Captions", icon: "forum" },
-              { id: "guide", label: "Guide", icon: "menu_book" }
+              { id: "chat", label: "Captions", icon: "forum" }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1516,24 +1547,7 @@ export default function SignAvatarAssistant({
               </div>
             )}
 
-            {activeTab === "guide" && (
-              <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-1">
-                <div className="text-[10px] font-bold text-cyan-300">Recognized Gestures:</div>
-                {SIGN_COMMANDS.map((cmd) => (
-                  <div
-                    key={cmd.gesture}
-                    onClick={() => executeSignAction(cmd)}
-                    className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-cyan-400/60 flex items-start gap-2 cursor-pointer transition-colors"
-                  >
-                    <span className="text-lg p-0.5 bg-slate-950 rounded border border-slate-800 flex-shrink-0">{cmd.icon}</span>
-                    <div className="min-w-0">
-                      <div className="font-bold text-[10px] text-cyan-300 truncate">{cmd.actionName}</div>
-                      <div className="text-[8px] text-slate-300 font-mono truncate">{cmd.signName}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+
           </div>
         </div>
 
@@ -1646,11 +1660,10 @@ export default function SignAvatarAssistant({
           {!isMinimized && (
             <div className="flex flex-col flex-1 overflow-y-auto max-h-[72vh]">
               
-              {/* 3D WebGL Avatar Mini Stage */}
-              <div className="w-full h-52 relative bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-b border-cyan-500/20 flex flex-col justify-between p-2 overflow-hidden">
-                {/* Status Indicator */}
-                <div className="w-full flex items-center justify-between z-10">
-                  <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900/85 border border-cyan-500/30 text-[10px]">
+              {/* Status Indicator & Live Caption Bar */}
+              <div className="px-4 py-2.5 bg-slate-900/90 border-b border-cyan-500/20 flex flex-col gap-2 flex-shrink-0">
+                <div className="w-full flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-950/80 border border-cyan-500/30 text-[10px]">
                     <span className={`w-2 h-2 rounded-full ${
                       avatarMood === "executing" ? "bg-amber-400 animate-ping" :
                       avatarMood === "recognized" ? "bg-cyan-400 animate-bounce" :
@@ -1673,29 +1686,18 @@ export default function SignAvatarAssistant({
                   )}
                 </div>
 
-                {/* Embedded Three.js 3D Avatar */}
-                <div className="w-full h-44 relative flex items-center justify-center -my-1">
-                  <Avatar3DCanvas
-                    avatarAction={avatarAction}
-                    isSpeaking={isSpeaking}
-                    status={avatarMood}
-                    className="w-full h-full"
-                  />
-                </div>
-
                 {/* Mini Live Captions */}
-                <div className="w-full z-10 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-cyan-500/30 text-[11px] font-semibold text-white truncate flex items-center gap-1.5">
+                <div className="w-full px-3 py-1.5 rounded-xl bg-slate-950/70 border border-white/5 text-[11px] font-semibold text-white truncate flex items-center gap-1.5">
                   <span className="text-cyan-400 text-xs">💬</span>
                   <span className="truncate">{captionText}</span>
                 </div>
               </div>
 
-              {/* Bot Navigation Tabs: [Sign Camera] | [Chat History] | [Sign Guide] */}
+              {/* Bot Navigation Tabs: [Sign Camera] | [Captions & History] */}
               <div className="flex border-b border-slate-800 bg-slate-900/80 px-2 pt-1 gap-1">
                 {[
                   { id: "camera", label: t("nova_tab_camera", "Sign Camera"), icon: "videocam" },
-                  { id: "chat", label: t("nova_tab_chat", "Captions & History"), icon: "forum" },
-                  { id: "guide", label: t("nova_tab_guide", "Sign Guide"), icon: "menu_book" }
+                  { id: "chat", label: t("nova_tab_chat", "Captions & History"), icon: "forum" }
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -1840,26 +1842,7 @@ export default function SignAvatarAssistant({
                 </div>
               )}
 
-              {/* Tab 3: Sign Guide Reference Library */}
-              {activeTab === "guide" && (
-                <div className="p-4 flex flex-col gap-2 min-h-[260px] max-h-[340px] overflow-y-auto">
-                  <div className="text-xs font-bold text-cyan-300 mb-1">Recognized Sign Gestures:</div>
-                  {SIGN_COMMANDS.map((cmd) => (
-                    <div
-                      key={cmd.gesture}
-                      onClick={() => executeSignAction(cmd)}
-                      className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-cyan-400/60 flex items-start gap-2.5 cursor-pointer transition-colors"
-                    >
-                      <span className="text-2xl p-1 bg-slate-950 rounded-lg border border-slate-800">{cmd.icon}</span>
-                      <div className="flex-1">
-                        <div className="font-bold text-xs text-cyan-300">{cmd.actionName}</div>
-                        <div className="text-[10px] text-slate-300 font-mono">{cmd.signName}</div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{cmd.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+
 
             </div>
           )}

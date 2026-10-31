@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import API from "../services/api";
 import SignLearning from "../components/SignLearning";
 import SignAvatarAssistant from "../components/SignAvatarAssistant";
+import { SignGuideView } from "../components/DeafMuteMode";
 import { useLanguage } from "../context/LanguageContext";
 import LanguageSelector from "../components/LanguageSelector";
 import WalletBadge from "../components/WalletBadge";
@@ -593,67 +594,18 @@ export default function DeafDashboard() {
 
           {/* Navigation Items (36px Height Each) */}
           <nav className="flex flex-col gap-1">
-            {/* Overview - Active Main Navigation */}
+            {/* Overview - Main Navigation */}
             <button
               onClick={() => navigate("/deaf")}
-              className="w-full h-[36px] flex items-center gap-2.5 px-3 py-1 rounded-lg text-left text-xs font-bold bg-[#0866F5] text-white shadow-xs transition-all flex-shrink-0"
+              className={`w-full h-[36px] flex items-center gap-2.5 px-3 py-1 rounded-lg text-left text-xs font-semibold transition-all flex-shrink-0 ${
+                activeTab === "home"
+                  ? "bg-[#0866F5] text-white shadow-xs font-bold"
+                  : "text-slate-700 hover:text-[#10265C] hover:bg-slate-100"
+              }`}
             >
-              <span className="material-symbols-outlined !text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>home</span>
+              <span className={`material-symbols-outlined !text-lg ${activeTab === "home" ? "text-white" : "text-[#0866F5]"}`} style={{ fontVariationSettings: "'FILL' 1" }}>home</span>
               <span className="truncate">Overview</span>
             </button>
-
-            {/* Nova AI Collapsible / Expanded Menu */}
-            <div className="flex flex-col">
-              <button
-                onClick={() => navigate("/deaf/learn-signs")}
-                className="w-full h-[36px] flex items-center justify-between px-3 py-1 rounded-lg text-left text-xs font-bold text-[#10265C] hover:bg-slate-100 transition-all flex-shrink-0"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="material-symbols-outlined !text-lg text-[#0866F5]">auto_awesome</span>
-                  <span className="truncate">Nova AI</span>
-                </div>
-                <span className="material-symbols-outlined !text-base text-slate-400">expand_more</span>
-              </button>
-
-              {/* Inline Sub-Menu Container */}
-              <div className="ml-2.5 my-1 p-1.5 rounded-lg bg-[#EAF4FF] border border-blue-100 flex flex-col gap-0.5">
-                <button
-                  onClick={() => navigate("/deaf/learn-signs")}
-                  className="w-full h-[32px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-bold bg-[#DBEAFE] text-[#0866F5] transition-all"
-                >
-                  <span className="material-symbols-outlined !text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>sign_language</span>
-                  <span className="truncate">Nova Sign AI</span>
-                </button>
-                <button
-                  onClick={() => navigate("/deaf/learn-signs")}
-                  className="w-full h-[30px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-semibold text-slate-600 hover:text-[#10265C] hover:bg-blue-100/50 transition-all"
-                >
-                  <span className="material-symbols-outlined !text-sm">view_in_ar</span>
-                  <span className="truncate">3D Sign Language Avatar</span>
-                </button>
-                <button
-                  onClick={() => navigate("/deaf/learn-signs")}
-                  className="w-full h-[30px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-semibold text-slate-600 hover:text-[#10265C] hover:bg-blue-100/50 transition-all"
-                >
-                  <span className="material-symbols-outlined !text-sm">photo_camera</span>
-                  <span className="truncate">Sign Camera</span>
-                </button>
-                <button
-                  onClick={() => navigate("/deaf/learn-signs")}
-                  className="w-full h-[30px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-semibold text-slate-600 hover:text-[#10265C] hover:bg-blue-100/50 transition-all"
-                >
-                  <span className="material-symbols-outlined !text-sm">subtitles</span>
-                  <span className="truncate">Captions & History</span>
-                </button>
-                <button
-                  onClick={() => navigate("/deaf/learn-signs")}
-                  className="w-full h-[30px] flex items-center gap-2 px-2.5 rounded-md text-left text-[11px] font-semibold text-slate-600 hover:text-[#10265C] hover:bg-blue-100/50 transition-all"
-                >
-                  <span className="material-symbols-outlined !text-sm">menu_book</span>
-                  <span className="truncate">Sign Guide</span>
-                </button>
-              </div>
-            </div>
 
             {/* Standard Nav Links (36px Height Each) */}
             {[
@@ -661,6 +613,7 @@ export default function DeafDashboard() {
               { id: "courses", label: "Course Library", icon: "grid_view" },
               { id: "my-learning", label: "My Learning", icon: "menu_book" },
               { id: "learn-signs", label: "Sign Practice", icon: "signal_cellular_alt" },
+              { id: "sign-guide", label: "Sign Guide", icon: "menu_book" },
               { id: "ai-tutor", label: "AI Tutor", icon: "chat_bubble" },
               { id: "activity", label: "Activity Dashboard", icon: "analytics" },
               { id: "profile", label: "Profile & Certificates", icon: "account_circle" },
@@ -669,9 +622,13 @@ export default function DeafDashboard() {
               <button
                 key={item.id}
                 onClick={() => navigate(`/deaf/${item.id === "home" ? "" : item.id}`)}
-                className="w-full h-[36px] flex items-center gap-2.5 px-3 py-1 rounded-lg text-left text-xs font-semibold text-slate-700 hover:text-[#10265C] hover:bg-slate-100 transition-all flex-shrink-0"
+                className={`w-full h-[36px] flex items-center gap-2.5 px-3 py-1 rounded-lg text-left text-xs font-semibold transition-all flex-shrink-0 ${
+                  activeTab === item.id
+                    ? "bg-[#0866F5] text-white shadow-xs font-bold"
+                    : "text-slate-700 hover:text-[#10265C] hover:bg-slate-100"
+                }`}
               >
-                <span className="material-symbols-outlined !text-lg text-[#0866F5]">{item.icon}</span>
+                <span className={`material-symbols-outlined !text-lg ${activeTab === item.id ? "text-white" : "text-[#0866F5]"}`}>{item.icon}</span>
                 <span className="truncate">{item.label}</span>
               </button>
             ))}
@@ -2119,11 +2076,28 @@ export default function DeafDashboard() {
             textTitleClass={textTitleClass}
           />
         )}
+
+        {/* 9. SIGN GUIDE & GESTURE REFERENCE */}
+        {activeTab === "sign-guide" && (
+          <SignGuideView
+            isLight={isLight}
+            cardClass={cardClass}
+            innerCardClass={innerCardClass}
+            textTitleClass={textTitleClass}
+            onNavigate={(tab) => {
+              setActiveTab(tab);
+              setSelectedCourse(null);
+              setActiveCoursePlay(null);
+              navigate(tab === "home" ? "/deaf" : `/deaf/${tab}`);
+            }}
+          />
+        )}
       </main>
 
       {/* ── Column 3: Dedicated 300px Right Panel (Nova Sign AI Avatar Bot) ── */}
       <SignAvatarAssistant
         embedded={true}
+        isPracticeMode={activeTab === "learn-signs"}
         isLight={isLight}
         onNavigate={(tab) => {
           setActiveTab(tab);
