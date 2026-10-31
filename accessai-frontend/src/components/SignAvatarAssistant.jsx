@@ -3,17 +3,47 @@ import { FilesetResolver, GestureRecognizer } from "@mediapipe/tasks-vision";
 import Avatar3DCanvas from "./Avatar3DCanvas";
 import { useLanguage } from "../context/LanguageContext";
 
-// Supported Command Sign Mapping
+// Supported Command Sign Mapping (Preserving all Legacy Gestures & Quick Commands)
 const SIGN_COMMANDS = [
+  {
+    gesture: "GUN_LEFT",
+    signName: "Left Gun Sign",
+    actionName: "Next Box / Forward",
+    icon: "👈",
+    targetTab: "next",
+    description: "Moves focus to the next box/grid item sequentially with continuous hold wrap-around",
+    avatarPose: "point_courses",
+    speechText: "Next item."
+  },
+  {
+    gesture: "GUN_RIGHT",
+    signName: "Right Gun Sign",
+    actionName: "Previous Box / Sidebar",
+    icon: "👉",
+    targetTab: "prev",
+    description: "Moves focus backwards, transitioning from Box 0 into Sidebar and Nova",
+    avatarPose: "wave",
+    speechText: "Previous item."
+  },
+  {
+    gesture: "Thumb_Up",
+    signName: "Thumbs Up",
+    actionName: "Select / Open Box",
+    icon: "👍",
+    targetTab: "select",
+    description: "Opens the currently focused grid box item dynamically",
+    avatarPose: "thumbs_up",
+    speechText: "Selected."
+  },
   {
     gesture: "Pointing_Up",
     signName: "Point Up / Index",
-    actionName: "Go to Courses",
+    actionName: "Course Library",
     icon: "☝️",
     targetTab: "courses",
-    description: "Points directly to the courses catalog and learning modules",
+    description: "Immediately navigates to Course Library",
     avatarPose: "point_courses",
-    speechText: "Going to the courses catalog now."
+    speechText: "Opening Course Library."
   },
   {
     gesture: "Victory",
@@ -26,24 +56,14 @@ const SIGN_COMMANDS = [
     speechText: "Taking you to the home dashboard."
   },
   {
-    gesture: "ILoveYou",
-    signName: "I Love You Sign",
-    actionName: "Sign Practice & Quiz",
-    icon: "🤟",
-    targetTab: "practice",
-    description: "Opens the real-time Sign Language learning & practice arena",
-    avatarPose: "sign_asl",
-    speechText: "Opening the interactive ASL sign practice arena."
-  },
-  {
-    gesture: "Thumb_Up",
-    signName: "Thumbs Up",
-    actionName: "Select / Confirm",
-    icon: "👍",
-    targetTab: "select",
-    description: "Selects the highlighted option or launches the active course lesson",
-    avatarPose: "thumbs_up",
-    speechText: "Selected."
+    gesture: "Closed_Fist",
+    signName: "Fist",
+    actionName: "Back / Close",
+    icon: "✊",
+    targetTab: "back",
+    description: "Executes Back or closes active modal",
+    avatarPose: "nod",
+    speechText: "Going back."
   },
   {
     gesture: "Open_Palm",
@@ -51,21 +71,430 @@ const SIGN_COMMANDS = [
     actionName: "Help & Commands",
     icon: "✋",
     targetTab: "help",
-    description: "Asks the AI Avatar for help and displays available sign commands",
+    description: "Asks AI Avatar for help and displays available sign commands",
     avatarPose: "wave",
     speechText: "Hello! Here are the sign commands I can recognize."
   },
   {
-    gesture: "Closed_Fist",
-    signName: "Fist",
-    actionName: "Back / Close",
-    icon: "✊",
-    targetTab: "back",
-    description: "Closes modal or navigates back",
+    gesture: "SCROLL_UP",
+    signName: "Scroll Up",
+    actionName: "Scroll Up",
+    icon: "🔼",
+    targetTab: "scroll_up",
+    description: "Smoothly scrolls the page up",
+    avatarPose: "point_courses",
+    speechText: "Scrolling up."
+  },
+  {
+    gesture: "SCROLL_DOWN",
+    signName: "Scroll Down",
+    actionName: "Scroll Down",
+    icon: "🔽",
+    targetTab: "scroll_down",
+    description: "Smoothly scrolls the page down",
     avatarPose: "nod",
-    speechText: "Going back."
+    speechText: "Scrolling down."
   }
 ];
+
+const GESTURE_CONFIG = {
+  INITIAL_HOLD_DELAY_MS: 1000,  // Exact 1.0s hold delay required before auto-repeat
+  REPEAT_INTERVAL_MS: 500,       // Controlled step pace (500ms per item)
+  CONFIDENCE_THRESHOLD: 0.82,   // MediaPipe detection confidence floor
+  SCROLL_DEADZONE: 0.035,        // Threshold to eliminate micro-jitters during scrolling
+  SMOOTHING_FACTOR: 0.20         // EWMA filter weight for smooth scrolling
+};
+
+// Permanent high-contrast focus glow injection (outline: 3px solid #3b82f6)
+const STYLE_ID = "accessai-gesture-focus-style";
+function injectFocusStyles() {
+  if (typeof document === "undefined" || document.getElementById(STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = STYLE_ID;
+  style.textContent = `
+    .focused-glow,
+    .focus-glow,
+    .focused,
+    .active-gesture-target,
+    [data-accessai-active="true"] {
+      outline: 3px solid #3b82f6 !important;
+      outline-offset: 3px !important;
+      box-shadow: 0 0 0 2px #ffffff,
+                  0 0 16px 4px rgba(59, 130, 246, 0.90),
+                  0 0 32px 8px rgba(59, 130, 246, 0.55),
+                  inset 0 0 10px rgba(59, 130, 246, 0.30) !important;
+      border-radius: 12px !important;
+      transition: outline 0.12s ease-in-out, box-shadow 0.15s ease-in-out !important;
+      z-index: 9999 !important;
+      position: relative !important;
+    }
+  `;
+  (document.head || document.documentElement).appendChild(style);
+}
+
+// Find scrollable container
+function getScrollableContainer() {
+  if (typeof document === "undefined") return null;
+  const main = document.querySelector("main.overflow-y-auto") || document.querySelector("main");
+  if (main && (main.scrollHeight > main.clientHeight)) return main;
+  return window;
+}
+
+// Proportional smooth scroll
+function smoothScrollBy(deltaY) {
+  if (typeof window === "undefined") return;
+  const container = getScrollableContainer();
+  if (container && container !== window && typeof container.scrollBy === "function") {
+    try {
+      container.scrollBy({ top: deltaY, behavior: "smooth" });
+    } catch(e) {
+      container.scrollTop += deltaY;
+    }
+  } else {
+    try {
+      window.scrollBy({ top: deltaY, behavior: "smooth" });
+    } catch(e) {
+      window.scrollBy(0, deltaY);
+    }
+  }
+}
+
+// ======================================================================================
+// INTEGRATED GESTURE CONTROLLER (Strict Hand Delegation: Left = Main Grid, Right = Sidebar/Nova)
+// ======================================================================================
+class IntegratedGestureController {
+  constructor(callbacks = {}) {
+    this.gridElements = [];
+    this.sidebarElements = [];
+    this.currentGridIndex = -1;
+    this.currentSidebarIndex = -1;
+    this.activeFocusDomain = null; // 'grid' or 'sidebar'
+
+    this.holdTimer = null;
+    this.repeatTimer = null;
+    this.currentActiveGesture = null;
+    this.smoothY = null;
+    this.callbacks = callbacks;
+    this.init();
+  }
+
+  init() {
+    injectFocusStyles();
+    this.refreshDOMLists();
+    this.registerLegacyAndQuickCommands();
+  }
+
+  refreshDOMLists() {
+    if (typeof document === "undefined") return;
+
+    // 1. Sidebar items: prioritize buttons inside <aside nav> in exact DOM order, followed by Nova launcher
+    const navButtons = Array.from(document.querySelectorAll('aside nav button, #deaf-sidebar nav button'));
+    const otherSidebar = Array.from(document.querySelectorAll(
+      '.sidebar a, .sidebar button, #sidebar a, #sidebar button, .sidebar-item, .sidebar-link, .nav-item, #overview, #honors, #career, #rewards, #course-library, #my-learning, #sign-practice, #ai-tutor, #activity-dashboard, #profile, [data-focusable="sidebar"]'
+    ));
+    const novaButtons = Array.from(document.querySelectorAll(
+      'button[title*="Toggle AI"], button[title*="Nova"], #nova, .nova-btn, [data-nav="nova"]'
+    ));
+
+    const combinedSidebar = [...navButtons, ...otherSidebar, ...novaButtons].filter(el => {
+      if (!el || el.offsetParent === null) return false;
+      const title = (el.getAttribute('title') || '').toLowerCase();
+      if (title.includes('sign out') || title.includes('logout')) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+
+    this.sidebarElements = Array.from(new Set(combinedSidebar));
+
+    // Select main grid cards and interactive elements
+    const gridItems = Array.from(document.querySelectorAll(
+      '.grid-card, .course-card, .box, .card, [data-focusable="grid"], main .grid > div.cursor-pointer, main .grid > div[class*="rounded"], main .grid > div[role="button"], main .grid > div, main div.cursor-pointer[class*="rounded"], main .grid > [tabindex="0"], main .card, main button.border-2, main [role="button"]:not([aria-disabled="true"]), main button:not([disabled]), main a[href]'
+    )).filter(el => {
+      if (!el || el.offsetParent === null) return false;
+      if (el.closest('#deaf-sidebar') || el.closest('aside') || el.closest('header')) return false;
+      if (el.closest('.fixed.bottom-6.right-6')) return false; // Exclude Nova floating window itself
+      const text = (el.textContent || '').trim().toLowerCase();
+      if (text.includes('open sign arena') || text.includes('sign practice')) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+
+    // Deduplicate and sort grid items left-to-right, top-to-bottom
+    const uniqueGrid = Array.from(new Set(gridItems));
+    uniqueGrid.sort((a, b) => {
+      const ra = a.getBoundingClientRect();
+      const rb = b.getBoundingClientRect();
+      if (Math.abs(ra.top - rb.top) > 25) return ra.top - rb.top;
+      return ra.left - rb.left;
+    });
+
+    this.gridElements = uniqueGrid;
+  }
+
+  // --- 1. LEFT HAND GUN: MAIN PAGE GRID TRAVERSAL ---
+  moveNextMainGrid() {
+    this.refreshDOMLists();
+    if (this.gridElements.length === 0) return;
+
+    this.activeFocusDomain = 'grid';
+    this.currentGridIndex = (this.currentGridIndex + 1) % this.gridElements.length;
+
+    // Row wrap auto-scroll for grid cards
+    const activeEl = this.gridElements[this.currentGridIndex];
+    if (activeEl && this.currentGridIndex > 0 && this.currentGridIndex % 3 === 0) {
+      smoothScrollBy(150);
+    }
+
+    this.updateUIFocus();
+  }
+
+  // --- 2. RIGHT HAND GUN: SIDEBAR & NOVA TRAVERSAL ---
+  moveNextSidebarItem() {
+    this.refreshDOMLists();
+    if (this.sidebarElements.length === 0) return;
+
+    this.activeFocusDomain = 'sidebar';
+    this.currentSidebarIndex = (this.currentSidebarIndex + 1) % this.sidebarElements.length;
+    this.updateUIFocus();
+  }
+
+  // Backward support for Left Hand Gun
+  movePrevMainGrid() {
+    this.refreshDOMLists();
+    if (this.gridElements.length === 0) return;
+
+    this.activeFocusDomain = 'grid';
+    this.currentGridIndex = (this.currentGridIndex - 1 + this.gridElements.length) % this.gridElements.length;
+    this.updateUIFocus();
+  }
+
+  // Backward support for Sidebar
+  movePrevSidebarItem() {
+    this.refreshDOMLists();
+    if (this.sidebarElements.length === 0) return;
+
+    this.activeFocusDomain = 'sidebar';
+    this.currentSidebarIndex = (this.currentSidebarIndex - 1 + this.sidebarElements.length) % this.sidebarElements.length;
+    this.updateUIFocus();
+  }
+
+  updateUIFocus() {
+    // Clear previous focus classes and inline outline styles
+    [...this.gridElements, ...this.sidebarElements].forEach(el => {
+      el.classList.remove('focused', 'active-gesture-target', 'focused-glow');
+      el.removeAttribute('data-accessai-active');
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+      el.style.boxShadow = '';
+    });
+
+    let currentFocusedEl = null;
+
+    if (this.activeFocusDomain === 'grid' && this.currentGridIndex >= 0 && this.currentGridIndex < this.gridElements.length) {
+      currentFocusedEl = this.gridElements[this.currentGridIndex];
+    } else if (this.activeFocusDomain === 'sidebar' && this.currentSidebarIndex >= 0 && this.currentSidebarIndex < this.sidebarElements.length) {
+      currentFocusedEl = this.sidebarElements[this.currentSidebarIndex];
+    }
+
+    if (currentFocusedEl) {
+      currentFocusedEl.classList.add('focused', 'active-gesture-target', 'focused-glow');
+      currentFocusedEl.setAttribute('data-accessai-active', 'true');
+      
+      // Inline styles guarantee visual glow even if CSS specificity conflicts
+      currentFocusedEl.style.outline = '3px solid #3b82f6';
+      currentFocusedEl.style.outlineOffset = '3px';
+      currentFocusedEl.style.boxShadow = '0 0 0 2px #ffffff, 0 0 16px 4px rgba(59, 130, 246, 0.90), 0 0 32px 8px rgba(59, 130, 246, 0.55)';
+      currentFocusedEl.style.borderRadius = '12px';
+      currentFocusedEl.style.transition = 'outline 0.12s ease-in-out, box-shadow 0.15s ease-in-out';
+
+      if (!currentFocusedEl.hasAttribute('tabindex')) currentFocusedEl.setAttribute('tabindex', '-1');
+      try { currentFocusedEl.focus({ preventScroll: true }); } catch(e) {}
+      currentFocusedEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }
+
+  // --- 3. DYNAMIC SELECTION (THUMBS UP) ---
+  activateCurrentSelection() {
+    this.refreshDOMLists();
+    let activeEl = null;
+
+    if (this.activeFocusDomain === 'grid' && this.currentGridIndex >= 0 && this.currentGridIndex < this.gridElements.length) {
+      activeEl = this.gridElements[this.currentGridIndex];
+    } else if (this.activeFocusDomain === 'sidebar' && this.currentSidebarIndex >= 0 && this.currentSidebarIndex < this.sidebarElements.length) {
+      activeEl = this.sidebarElements[this.currentSidebarIndex];
+    } else {
+      activeEl = document.querySelector('.focused, .active-gesture-target, .focused-glow, [data-accessai-active="true"]');
+    }
+
+    if (!activeEl) return;
+
+    // 1. Check for specific video/modal data attributes first
+    if (activeEl.dataset && activeEl.dataset.videoId && typeof window.openVideoModal === 'function') {
+      window.openVideoModal(activeEl.dataset.videoId);
+      return;
+    }
+
+    const videoChild = activeEl.querySelector('[data-video-id]');
+    if (videoChild && videoChild.dataset.videoId && typeof window.openVideoModal === 'function') {
+      window.openVideoModal(videoChild.dataset.videoId);
+      return;
+    }
+
+    // 2. Trigger internal action button if present (e.g. "Start Course", "Launch Course Player", "View Details")
+    const innerAction = activeEl.querySelector('button, a[href], [role="button"]');
+    if (innerAction && innerAction !== activeEl) {
+      try {
+        innerAction.click();
+        return;
+      } catch (e) {}
+    }
+
+    // 3. Trigger React internal props onClick if available
+    try {
+      const reactKey = Object.keys(activeEl).find(k => k.startsWith('__reactProps'));
+      if (reactKey && activeEl[reactKey] && typeof activeEl[reactKey].onClick === 'function') {
+        activeEl[reactKey].onClick({
+          stopPropagation: () => {},
+          preventDefault: () => {},
+          target: activeEl,
+          currentTarget: activeEl
+        });
+        return;
+      }
+    } catch (e) {}
+
+    // 4. Native click event dispatch
+    try {
+      activeEl.click();
+    } catch (e) {
+      console.warn('Click activation error:', e);
+    }
+  }
+
+  // Aliases for compatibility
+  moveNext() {
+    this.moveNextMainGrid();
+  }
+
+  movePrevious() {
+    this.moveNextSidebarItem();
+  }
+
+  // --- LEGACY GESTURES & QUICK COMMANDS ---
+  registerLegacyAndQuickCommands() {
+    this.legacyCommands = {
+      'INDEX_FINGER_UP': () => {
+        const courseLibBtn = document.querySelector('#course-library, [href*="course-library"], [href*="/courses"], .course-library-btn, button[data-tab="courses"]');
+        if (courseLibBtn) {
+          courseLibBtn.click();
+        } else if (typeof this.callbacks.onNavigate === 'function') {
+          this.callbacks.onNavigate('courses');
+        } else {
+          window.location.href = '/deaf/courses';
+        }
+      },
+      'VICTORY': () => {
+        const homeBtn = document.querySelector('#home, [href*="home"], [href*="/deaf"], button[data-tab="home"]');
+        if (homeBtn) {
+          homeBtn.click();
+        } else if (typeof this.callbacks.onNavigate === 'function') {
+          this.callbacks.onNavigate('home');
+        } else {
+          window.location.href = '/deaf';
+        }
+      },
+      'FIST': () => {
+        const closeBtn = document.querySelector('.modal-close, .btn-back, button[aria-label="Close"], button[title="Close"]');
+        if (closeBtn) {
+          closeBtn.click();
+        } else if (typeof window !== "undefined" && window.history.length > 1) {
+          window.history.back();
+        } else if (typeof this.callbacks.onNavigate === 'function') {
+          this.callbacks.onNavigate('home');
+        }
+      },
+      'OPEN_PALM': () => {
+        if (typeof this.callbacks.setActiveTab === 'function') {
+          this.callbacks.setActiveTab('guide');
+        }
+      }
+    };
+  }
+
+  // --- 1.0 SECOND HOLD TIMING ENGINE WITH DEBOUNCE RESILIENCE ---
+  handleContinuousGesture(gestureName, actionCallback) {
+    if (this.clearGraceTimer) {
+      clearTimeout(this.clearGraceTimer);
+      this.clearGraceTimer = null;
+    }
+
+    if (this.currentActiveGesture === gestureName) return;
+
+    this.clearGestureTimers();
+    this.currentActiveGesture = gestureName;
+
+    // Immediate step on initial frame
+    actionCallback();
+
+    // Enforce 1000ms delay before engagement of step repetition
+    this.holdTimer = setTimeout(() => {
+      this.repeatTimer = setInterval(() => {
+        actionCallback();
+      }, GESTURE_CONFIG.REPEAT_INTERVAL_MS);
+    }, GESTURE_CONFIG.INITIAL_HOLD_DELAY_MS);
+  }
+
+  scheduleClearGestureTimers() {
+    if (this.clearGraceTimer) return;
+    // 250ms grace period prevents single-frame tracking drop from interrupting 1.0s continuous hold
+    this.clearGraceTimer = setTimeout(() => {
+      this.clearGestureTimers();
+      this.clearGraceTimer = null;
+    }, 250);
+  }
+
+  clearGestureTimers() {
+    if (this.clearGraceTimer) clearTimeout(this.clearGraceTimer);
+    if (this.holdTimer) clearTimeout(this.holdTimer);
+    if (this.repeatTimer) clearInterval(this.repeatTimer);
+    this.clearGraceTimer = null;
+    this.holdTimer = null;
+    this.repeatTimer = null;
+    this.currentActiveGesture = null;
+  }
+
+  // --- VERTICAL SCROLLING ENGINE ---
+  handleVerticalScroll(currentY) {
+    if (this.smoothY === null) {
+      this.smoothY = currentY;
+      return;
+    }
+
+    // Low-pass EWMA filter for smoothing raw MediaPipe landmark Y coordinates
+    this.smoothY = (GESTURE_CONFIG.SMOOTHING_FACTOR * currentY) + ((1 - GESTURE_CONFIG.SMOOTHING_FACTOR) * this.smoothY);
+    const deltaY = currentY - this.smoothY;
+
+    if (Math.abs(deltaY) > GESTURE_CONFIG.SCROLL_DEADZONE) {
+      const scrollSpeedMultiplier = 1200;
+      const scrollAmount = deltaY * scrollSpeedMultiplier;
+
+      // Target scrollable container (e.g. main.overflow-y-auto in DeafDashboard)
+      const scrollContainer = document.querySelector('main.overflow-y-auto, main, [class*="overflow-y-auto"], #root');
+      if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+        try {
+          scrollContainer.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+        } catch(e) {
+          scrollContainer.scrollTop += scrollAmount;
+        }
+      }
+      try {
+        window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+      } catch(e) {
+        window.scrollBy(0, scrollAmount);
+      }
+    }
+  }
+}
 
 export default function SignAvatarAssistant({
   onNavigate,
@@ -87,50 +516,86 @@ export default function SignAvatarAssistant({
   const [detectedGesture, setDetectedGesture] = useState("None");
   const [detectedConfidence, setDetectedConfidence] = useState(0);
   const [holdProgress, setHoldProgress] = useState(0); // 0 to 100%
-  const [lastExecutedCommand, setLastExecutedCommand] = useState(null);
   const [audioVoiceEnabled, setAudioVoiceEnabled] = useState(false); // Silent by default for deaf users
   
-  // Localized Commands
+  // Initialize Gesture Controller
+  const controllerRef = useRef(null);
+  if (!controllerRef.current) {
+    controllerRef.current = new IntegratedGestureController({
+      onNavigate,
+      onOpenSignPractice,
+      onSelect,
+      setActiveTab
+    });
+  }
+  controllerRef.current.callbacks = {
+    onNavigate,
+    onOpenSignPractice,
+    onSelect,
+    setActiveTab
+  };
+
+  // Localized Commands preserving all legacy & quick command gestures with strict Hand-Role Delegation
   const commands = useMemo(() => [
     {
-      gesture: "Pointing_Up",
-      signName: language === "hi" ? "तर्जनी संकेत / ऊपर" : language === "kn" ? "ತೋರ್ಬೆರಳು ಸನ್ನೆ" : "Point Up / Index",
-      actionName: t("cmd_courses_action", "Go to Courses"),
-      icon: "☝️",
-      targetTab: "courses",
-      description: t("cmd_courses_desc", "Points directly to the courses catalog and learning modules"),
+      gesture: "GUN_LEFT",
+      signName: language === "hi" ? "बायाँ गन संकेत" : language === "kn" ? "ಎಡ ಗನ್ ಸನ್ನೆ" : "Left Gun Sign",
+      actionName: t("cmd_grid_action", "Main Grid Forward"),
+      icon: "👈",
+      targetTab: "grid",
+      description: "Controls focus navigation on Main Page & Grid items (Left-to-Right)",
       avatarPose: "point_courses",
-      speechText: language === "hi" ? "पाठ्यक्रम संग्रह खोला जा रहा है।" : language === "kn" ? "ಕೋರ್ಸ್‌ಗಳನ್ನು ತೆರೆಯಲಾಗುತ್ತಿದೆ." : "Going to the courses catalog now."
+      speechText: "Next grid item."
     },
     {
-      gesture: "Victory",
-      signName: language === "hi" ? "शांति / दो" : language === "kn" ? "ವಿಕ್ಟರಿ / ಎರಡು" : "Peace / Two",
-      actionName: t("cmd_home_action", "Home Dashboard"),
-      icon: "✌️",
-      targetTab: "home",
-      description: t("cmd_home_desc", "Returns to your main Deaf/Mute Dashboard overview"),
+      gesture: "GUN_RIGHT",
+      signName: language === "hi" ? "दायाँ गन संकेत" : language === "kn" ? "ಬಲ ಗನ್ ಸನ್ನೆ" : "Right Gun Sign",
+      actionName: t("cmd_sidebar_action", "Sidebar & Nova"),
+      icon: "👉",
+      targetTab: "sidebar",
+      description: "Controls focus navigation specifically within Sidebar items and Nova",
       avatarPose: "wave",
-      speechText: language === "hi" ? "मुख्य डैशबोर्ड पर वापस ले जा रहा हूँ।" : language === "kn" ? "ಮುಖ್ಯ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್‌ಗೆ ಹಿಂತಿರುಗಿಸಲಾಗುತ್ತಿದೆ." : "Taking you to the home dashboard."
-    },
-    {
-      gesture: "ILoveYou",
-      signName: language === "hi" ? "आई लव यू संकेत" : language === "kn" ? "ಐ ಲವ್ ಯು ಸನ್ನೆ" : "I Love You Sign",
-      actionName: t("cmd_practice_action", "Sign Practice & Quiz"),
-      icon: "🤟",
-      targetTab: "practice",
-      description: t("cmd_practice_desc", "Opens the real-time Sign Language learning & practice arena"),
-      avatarPose: "sign_asl",
-      speechText: language === "hi" ? "इंटरैक्टिव सांकेतिक भाषा अभ्यास क्षेत्र खोला जा रहा है।" : language === "kn" ? "ಸನ್ನೆ ಭಾಷಾ ಅಭ್ಯಾಸ ರಂಗವನ್ನು ತೆರೆಯಲಾಗುತ್ತಿದೆ." : "Opening the interactive ASL sign practice arena."
+      speechText: "Next sidebar item."
     },
     {
       gesture: "Thumb_Up",
       signName: language === "hi" ? "अंगूठा ऊपर / पुष्टि" : language === "kn" ? "ಹೆಬ್ಬೆರಳು ಮೇಲೆ / ದೃಢೀಕರಣ" : "Thumbs Up",
-      actionName: t("cmd_select_action", "Select / Confirm"),
+      actionName: t("cmd_select_action", "Select / Open Box"),
       icon: "👍",
       targetTab: "select",
-      description: t("cmd_select_desc", "Selects the highlighted option or launches the active course lesson"),
+      description: "Opens whichever box or sidebar item is currently focused dynamically",
       avatarPose: "thumbs_up",
       speechText: language === "hi" ? "चयनित।" : language === "kn" ? "ಆಯ್ಕೆಯಾಗಿದೆ." : "Selected."
+    },
+    {
+      gesture: "Pointing_Up",
+      signName: language === "hi" ? "तर्जनी ऊपर" : language === "kn" ? "ತೋರುಬೆರಳು ಮೇಲೆ" : "Point Up / Index",
+      actionName: t("cmd_courses_action", "Course Library"),
+      icon: "☝️",
+      targetTab: "courses",
+      description: "Immediately opens Course Library",
+      avatarPose: "point_courses",
+      speechText: "Opening Course Library."
+    },
+    {
+      gesture: "Victory",
+      signName: language === "hi" ? "शांति संकेत" : language === "kn" ? "ಶಾಂತಿ ಸನ್ನೆ" : "Peace / Two",
+      actionName: t("cmd_home_action", "Home Dashboard"),
+      icon: "✌️",
+      targetTab: "home",
+      description: "Returns to your main Deaf/Mute Dashboard overview",
+      avatarPose: "wave",
+      speechText: "Taking you to the home dashboard."
+    },
+    {
+      gesture: "Closed_Fist",
+      signName: language === "hi" ? "मुट्ठी / वापस" : language === "kn" ? "मुಷ್ಟಿ / ಹಿಂದಕ್ಕೆ" : "Fist",
+      actionName: t("cmd_back_action", "Back / Close"),
+      icon: "✊",
+      targetTab: "back",
+      description: t("cmd_back_desc", "Closes modal or navigates back"),
+      avatarPose: "nod",
+      speechText: language === "hi" ? "पीछे जा रहा हूँ।" : language === "kn" ? "ಹಿಂದಕ್ಕೆ ಹೋಗಲಾಗುತ್ತಿದೆ." : "Going back."
     },
     {
       gesture: "Open_Palm",
@@ -143,14 +608,24 @@ export default function SignAvatarAssistant({
       speechText: language === "hi" ? "नमस्ते! यहाँ उपलब्ध सांकेतिक आदेश हैं।" : language === "kn" ? "ನಮಸ್ಕಾರ! ಇಲ್ಲಿ ಲಭ್ಯವಿರುವ ಸನ್ನೆ ಆಜ್ಞೆಗಳಿವೆ." : "Hello! Here are the sign commands I can recognize."
     },
     {
-      gesture: "Closed_Fist",
-      signName: language === "hi" ? "मुट्ठी / वापस" : language === "kn" ? "ಮುಷ್ಟಿ / ಹಿಂದಕ್ಕೆ" : "Fist",
-      actionName: t("cmd_back_action", "Back / Close"),
-      icon: "✊",
-      targetTab: "back",
-      description: t("cmd_back_desc", "Closes modal or navigates back"),
+      gesture: "SCROLL_UP",
+      signName: language === "hi" ? "ऊपर स्क्रॉल करें" : language === "kn" ? "ಮೇಲಕ್ಕೆ ಸ್ಕ್ರೋಲ್ ಮಾಡಿ" : "Scroll Up",
+      actionName: "Scroll Up",
+      icon: "🔼",
+      targetTab: "scroll_up",
+      description: "Smoothly scrolls the page up",
+      avatarPose: "point_courses",
+      speechText: "Scrolling up."
+    },
+    {
+      gesture: "SCROLL_DOWN",
+      signName: language === "hi" ? "नीचे स्क्रॉल करें" : language === "kn" ? "ಕೆಳಕ್ಕೆ ಸ್ಕ್ರೋಲ್ ಮಾಡಿ" : "Scroll Down",
+      actionName: "Scroll Down",
+      icon: "🔽",
+      targetTab: "scroll_down",
+      description: "Smoothly scrolls the page down",
       avatarPose: "nod",
-      speechText: language === "hi" ? "पीछे जा रहा हूँ।" : language === "kn" ? "ಹಿಂದಕ್ಕೆ ಹೋಗಲಾಗುತ್ತಿದೆ." : "Going back."
+      speechText: "Scrolling down."
     }
   ], [t, language]);
 
@@ -183,14 +658,147 @@ export default function SignAvatarAssistant({
   const requestRef = useRef(null);
   const lastVideoTimeRef = useRef(-1);
 
-  // Hold-to-trigger management refs
-  const currentHoldingGestureRef = useRef("None");
-  const holdStartTimeRef = useRef(0);
-  const HOLD_DURATION_MS = 600; // Hold sign for 0.6s to trigger
+  // Gesture state tracking refs
+  const holdGestureRef = useRef("None");
+  const holdStartRef = useRef(0);
   const lastTriggeredTimeRef = useRef(0);
-  const COOLDOWN_MS = 2000; // 2s cooldown between commands to prevent rapid firing
 
-  // Initialize MediaPipe Gesture Recognizer
+  // Avatar speech and captions helper
+  const triggerAvatarResponse = useCallback((caption, avatarPose = "nod", speechVoiceText = "") => {
+    setCaptionText(caption);
+    setAvatarAction(avatarPose);
+    setIsSpeaking(true);
+
+    setChatHistory((prev) => [
+      ...prev,
+      {
+        id: "msg-" + Date.now(),
+        sender: "nova",
+        text: caption,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      }
+    ]);
+
+    if (audioVoiceEnabled && speechVoiceText && typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(speechVoiceText);
+      utt.rate = 1.0;
+      utt.pitch = 1.05;
+      utt.onend = () => {
+        setIsSpeaking(false);
+        setTimeout(() => setAvatarAction("idle"), 800);
+      };
+      utt.onerror = () => {
+        setIsSpeaking(false);
+        setTimeout(() => setAvatarAction("idle"), 800);
+      };
+      window.speechSynthesis.speak(utt);
+    } else {
+      setTimeout(() => {
+        setIsSpeaking(false);
+      }, 2000);
+      setTimeout(() => {
+        setAvatarAction("idle");
+      }, 3000);
+    }
+  }, [audioVoiceEnabled]);
+
+  // Fast Sign Command dispatcher for UI pills and legacy bindings
+  const executeSignAction = useCallback((command) => {
+    if (!command) return;
+    const now = Date.now();
+    lastTriggeredTimeRef.current = now;
+    setAvatarMood("executing");
+
+    setChatHistory((prev) => [
+      ...prev,
+      {
+        id: "sign-" + Date.now(),
+        sender: "user",
+        text: `${command.icon} Signed: "${command.signName}"`,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      }
+    ]);
+
+    triggerAvatarResponse(
+      `✨ Executing Sign: "${command.actionName}"!`,
+      command.avatarPose || "nod",
+      command.speechText || ""
+    );
+
+    const ctrl = controllerRef.current;
+    if (!ctrl) return;
+
+    if (command.gesture === "GUN_LEFT") {
+      ctrl.moveNextMainGrid();
+    } else if (command.gesture === "GUN_RIGHT") {
+      ctrl.moveNextSidebarItem();
+    } else if (command.gesture === "Thumb_Up") {
+      ctrl.activateCurrentSelection();
+    } else if (command.gesture === "Pointing_Up" || command.targetTab === "courses") {
+      if (ctrl.legacyCommands["INDEX_FINGER_UP"]) ctrl.legacyCommands["INDEX_FINGER_UP"]();
+    } else if (command.gesture === "Victory" || command.targetTab === "home") {
+      if (ctrl.legacyCommands["VICTORY"]) ctrl.legacyCommands["VICTORY"]();
+    } else if (command.gesture === "Closed_Fist" || command.targetTab === "back") {
+      if (ctrl.legacyCommands["FIST"]) ctrl.legacyCommands["FIST"]();
+    } else if (command.gesture === "Open_Palm" || command.targetTab === "help") {
+      if (ctrl.legacyCommands["OPEN_PALM"]) ctrl.legacyCommands["OPEN_PALM"]();
+    } else if (command.gesture === "SCROLL_UP") {
+      smoothScrollBy(-260);
+    } else if (command.gesture === "SCROLL_DOWN") {
+      smoothScrollBy(260);
+    }
+  }, [triggerAvatarResponse]);
+
+  // Route Change Listener and MutationObserver for Continuous Traversal & Focus
+  useEffect(() => {
+    const handleRoute = () => {
+      if (controllerRef.current) {
+        controllerRef.current.currentGridIndex = 0;
+        controllerRef.current.activeFocusDomain = 'grid';
+        controllerRef.current.refreshDOMLists();
+        controllerRef.current.updateUIFocus();
+      }
+    };
+
+    window.addEventListener("popstate", handleRoute);
+    window.addEventListener("hashchange", handleRoute);
+
+    const observer = new MutationObserver((mutations) => {
+      let relevant = false;
+      for (const m of mutations) {
+        if (m.target && m.target.id === STYLE_ID) continue;
+        relevant = true;
+        break;
+      }
+      if (!relevant) return;
+
+      if (controllerRef.current) {
+        controllerRef.current.refreshDOMLists();
+        const focusedEl = document.querySelector(".focused, .focused-glow, [data-accessai-active='true']");
+        if (!focusedEl && controllerRef.current.gridElements.length > 0) {
+          if (controllerRef.current.currentGridIndex === -1) {
+            controllerRef.current.currentGridIndex = 0;
+            controllerRef.current.activeFocusDomain = 'grid';
+          }
+          controllerRef.current.updateUIFocus();
+        }
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      window.removeEventListener("popstate", handleRoute);
+      window.removeEventListener("hashchange", handleRoute);
+      observer.disconnect();
+      if (controllerRef.current) {
+        controllerRef.current.clearGestureTimers();
+      }
+    };
+  }, []);
+
+  // Initialize MediaPipe Gesture Recognizer with 2 hands
   useEffect(() => {
     let isMounted = true;
     async function initGestureEngine() {
@@ -208,7 +816,7 @@ export default function SignAvatarAssistant({
             delegate: "GPU"
           },
           runningMode: "VIDEO",
-          numHands: 1
+          numHands: 2
         });
 
         if (!isMounted) return;
@@ -226,7 +834,7 @@ export default function SignAvatarAssistant({
               delegate: "CPU"
             },
             runningMode: "VIDEO",
-            numHands: 1
+            numHands: 2
           });
           if (isMounted) {
             recognizerRef.current = recognizer;
@@ -253,7 +861,7 @@ export default function SignAvatarAssistant({
     };
   }, []);
 
-  // Ensure video element receives stream and starts playing as soon as camera is active
+  // Video element playback hook
   useEffect(() => {
     if (cameraActive && streamRef.current && videoRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -264,103 +872,8 @@ export default function SignAvatarAssistant({
         console.warn("Video playback exception:", err);
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraActive]);
-
-  // Avatar speech and captions helper
-  const triggerAvatarResponse = useCallback((caption, avatarPose = "nod", speechVoiceText = "") => {
-    setCaptionText(caption);
-    setAvatarAction(avatarPose);
-    setIsSpeaking(true);
-
-    // Add to chat history
-    setChatHistory((prev) => [
-      ...prev,
-      {
-        id: "msg-" + Date.now(),
-        sender: "nova",
-        text: caption,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      }
-    ]);
-
-    // Optional audio TTS for hearing peers when toggled ON
-    if (audioVoiceEnabled && speechVoiceText && typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(speechVoiceText);
-      utt.rate = 1.0;
-      utt.pitch = 1.05;
-      utt.onend = () => {
-        setIsSpeaking(false);
-        setTimeout(() => setAvatarAction("idle"), 800);
-      };
-      utt.onerror = () => {
-        setIsSpeaking(false);
-        setTimeout(() => setAvatarAction("idle"), 800);
-      };
-      window.speechSynthesis.speak(utt);
-    } else {
-      // Visual only timing
-      setTimeout(() => {
-        setIsSpeaking(false);
-      }, 2000);
-      setTimeout(() => {
-        setAvatarAction("idle");
-      }, 3000);
-    }
-  }, [audioVoiceEnabled]);
-
-  // Execute recognized sign command
-  const executeSignAction = useCallback((command) => {
-    const now = Date.now();
-    lastTriggeredTimeRef.current = now;
-    setLastExecutedCommand(command);
-    setAvatarMood("executing");
-
-    // Add user sign message to chat feed
-    setChatHistory((prev) => [
-      ...prev,
-      {
-        id: "sign-" + Date.now(),
-        sender: "user",
-        text: `${command.icon} Signed: "${command.signName}"`,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      }
-    ]);
-
-    triggerAvatarResponse(
-      `✨ Executing Sign: "${command.actionName}"!`,
-      command.avatarPose,
-      command.speechText
-    );
-
-    // Dispatch target application action
-    if (command.targetTab === "courses") {
-      if (onNavigate) onNavigate("courses");
-    } else if (command.targetTab === "home") {
-      if (onNavigate) onNavigate("home");
-    } else if (command.targetTab === "practice") {
-      if (onOpenSignPractice) {
-        onOpenSignPractice();
-      } else if (onNavigate) {
-        onNavigate("learn-signs");
-      }
-    } else if (command.targetTab === "select" || command.targetTab === "confirm") {
-      if (onSelect) {
-        onSelect();
-      } else if (onNavigate) {
-        onNavigate("select");
-      }
-    } else if (command.targetTab === "help") {
-      setActiveTab("guide");
-    } else if (command.targetTab === "back") {
-      if (onNavigate) onNavigate("home");
-    }
-
-    setTimeout(() => {
-      setAvatarMood("listening");
-      setHoldProgress(0);
-    }, 1500);
-  }, [onNavigate, onOpenSignPractice, triggerAvatarResponse]);
 
   // Start Webcam
   const startCamera = async () => {
@@ -410,6 +923,10 @@ export default function SignAvatarAssistant({
       const ctx = canvasRef.current.getContext("2d");
       ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
+    if (controllerRef.current) {
+      controllerRef.current.clearGestureTimers();
+      controllerRef.current.smoothY = null;
+    }
     setCameraActive(false);
     setDetectedGesture("None");
     setHoldProgress(0);
@@ -417,13 +934,91 @@ export default function SignAvatarAssistant({
     setAvatarAction("idle");
   };
 
-  // Real-time Detection Loop
+  // Landmark Geometric Classifier: Dual-Hand Gun, Thumbs Up, Pointing Up, Victory, Fist, Open Palm
+  const classifyLandmarks = (lm, handednessStr) => {
+    if (!lm || lm.length < 21) return null;
+
+    const d = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    const wrist = lm[0];
+
+    const isExt = (tip, pip, mcp) => d(lm[tip], wrist) > d(lm[pip], wrist) * 1.12 && d(lm[pip], wrist) > d(lm[mcp], wrist) * 0.95;
+    const isCurl = (tip, pip, mcp) => d(lm[tip], wrist) < d(lm[pip], wrist) * 1.05 || d(lm[tip], wrist) < d(lm[mcp], wrist) * 1.15;
+
+    const thumbExt = d(lm[4], lm[9]) > d(lm[2], lm[9]) * 1.25;
+    const thumbCurl = d(lm[4], lm[9]) < d(lm[2], lm[9]) * 1.15;
+
+    const indexExt = isExt(8, 6, 5);
+    const indexCurl = isCurl(8, 6, 5);
+    const middleExt = isExt(12, 10, 9);
+    const middleCurl = isCurl(12, 10, 9);
+    const ringExt = isExt(16, 14, 13);
+    const ringCurl = isCurl(16, 14, 13);
+    const pinkyExt = isExt(20, 18, 17);
+    const pinkyCurl = isCurl(20, 18, 17);
+
+    // 1. Thumbs Up: Thumb extended, 4 fingers curled, thumb tip above MCP
+    if (thumbExt && indexCurl && middleCurl && ringCurl && pinkyCurl && lm[4].y < lm[2].y - 0.04) {
+      return { name: "Thumb_Up", score: 0.95 };
+    }
+
+    // 2. Open Palm: All 5 fingers extended
+    if (thumbExt && indexExt && middleExt && ringExt && pinkyExt) {
+      return { name: "Open_Palm", score: 0.95 };
+    }
+
+    // 3. Closed Fist: All fingers curled
+    if (thumbCurl && indexCurl && middleCurl && ringCurl && pinkyCurl) {
+      return { name: "Closed_Fist", score: 0.92 };
+    }
+
+    // 4. Pointing Up: Index extended, Middle/Ring/Pinky curled, pointing upward
+    if (indexExt && middleCurl && ringCurl && pinkyCurl && lm[8].y < lm[6].y - 0.05) {
+      return { name: "Pointing_Up", score: 0.93 };
+    }
+
+    // 5. Victory / Peace Sign: Index and Middle extended, Ring/Pinky curled
+    if (indexExt && middleExt && ringCurl && pinkyCurl) {
+      return { name: "Victory", score: 0.92 };
+    }
+
+    // 6. Dual-Hand Gun Sign: Index extended, Thumb extended, Middle/Ring/Pinky curled
+    if (indexExt && thumbExt && (middleCurl || !middleExt) && (ringCurl || !ringExt) && (pinkyCurl || !pinkyExt)) {
+      // In webcam selfie mirror mode (CSS -scale-x-100):
+      // Raw lm[8].x < lm[5].x -> points Right 👉 on mirrored screen (Right Hand Gun)
+      // Raw lm[8].x > lm[5].x -> points Left 👈 on mirrored screen (Left Hand Gun)
+      const dxRaw = lm[8].x - lm[5].x;
+      let gesture = "GUN_RIGHT";
+      if (dxRaw > 0.02) {
+        gesture = "GUN_LEFT";  // Pointing Left 👈
+      } else if (dxRaw < -0.02) {
+        gesture = "GUN_RIGHT"; // Pointing Right 👉
+      } else {
+        // Fallback to chirality if pointing mostly vertical or forward
+        gesture = (handednessStr === "Left") ? "GUN_RIGHT" : "GUN_LEFT";
+      }
+      return { name: gesture, score: 0.95 };
+    }
+
+    // 7. Vertical Scroll Up/Down via Index
+    if (indexExt && middleCurl && ringCurl && pinkyCurl) {
+      if (lm[8].y < lm[6].y - 0.08) {
+        return { name: "SCROLL_UP", score: 0.88 };
+      } else if (lm[8].y > lm[6].y + 0.08) {
+        return { name: "SCROLL_DOWN", score: 0.88 };
+      }
+    }
+
+    return null;
+  };
+
+  // Real-time Detection Loop with Auto-Repeat Continuous Traversal & EWMA Vertical Scroll
   const predictLoop = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const recognizer = recognizerRef.current;
+    const controller = controllerRef.current;
 
-    if (!video || !canvas || !recognizer || !streamRef.current) return;
+    if (!video || !canvas || !recognizer || !streamRef.current || !controller) return;
 
     if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -440,53 +1035,204 @@ export default function SignAvatarAssistant({
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Process Detected Gestures
-        if (results && results.gestures && results.gestures.length > 0 && results.gestures[0].length > 0) {
-          const topGesture = results.gestures[0][0];
-          const gestureName = topGesture.categoryName;
-          const score = topGesture.score;
+        let activeGestureName = "None";
+        let confidenceScore = 0;
 
-          setDetectedGesture(gestureName);
-          setDetectedConfidence(Math.round(score * 100));
+        if (results && results.landmarks && results.landmarks.length > 0) {
+          const firstHandLandmarks = results.landmarks[0];
+          const handednessStr = results.handednesses && results.handednesses[0] && results.handednesses[0][0]
+            ? results.handednesses[0][0].categoryName
+            : "Right";
 
-          // Draw skeleton landmarks on video canvas
-          if (results.landmarks && results.landmarks[0]) {
-            drawHandLandmarks(ctx, results.landmarks[0], canvas.width, canvas.height, gestureName);
+          // 1. First priority: Geometric landmark classification
+          const geom = classifyLandmarks(firstHandLandmarks, handednessStr);
+          if (geom) {
+            activeGestureName = geom.name;
+            confidenceScore = Math.round(geom.score * 100);
+          } else if (results.gestures && results.gestures[0] && results.gestures[0][0]) {
+            const topStock = results.gestures[0][0];
+            if (topStock.categoryName !== "ILoveYou") {
+              activeGestureName = topStock.categoryName;
+              confidenceScore = Math.round(topStock.score * 100);
+            }
           }
 
-          // Check if detected gesture maps to a command
-          const matchedCmd = (commandsRef.current || SIGN_COMMANDS).find((c) => c.gesture === gestureName);
-          const now = Date.now();
+          // Draw skeleton landmarks on video canvas
+          drawHandLandmarks(ctx, firstHandLandmarks, canvas.width, canvas.height, activeGestureName);
 
-          if (matchedCmd && (now - lastTriggeredTimeRef.current > COOLDOWN_MS)) {
-            if (currentHoldingGestureRef.current === gestureName) {
-              const elapsed = now - holdStartTimeRef.current;
-              const progress = Math.min(100, Math.round((elapsed / HOLD_DURATION_MS) * 100));
-              setHoldProgress(progress);
+          // 2. High-Accuracy Vertical Scrolling with EWMA Low-Pass Filter (landmarks[8].y)
+          if (activeGestureName === "Open_Palm" || activeGestureName === "Victory" || activeGestureName === "SCROLL_UP" || activeGestureName === "SCROLL_DOWN") {
+            controller.handleVerticalScroll(firstHandLandmarks[8].y); // Index finger tip Y
+          } else {
+            controller.smoothY = null;
+          }
 
-              if (elapsed >= HOLD_DURATION_MS) {
-                executeSignAction(matchedCmd);
-                currentHoldingGestureRef.current = "None";
-                holdStartTimeRef.current = 0;
-              }
-            } else {
-              currentHoldingGestureRef.current = gestureName;
-              holdStartTimeRef.current = now;
+          // 3. Continuous Auto-Repeat State Machine for Navigation & Selection
+          const now = performance.now();
+
+          if (activeGestureName === "GUN_LEFT") {
+            if (controller.clearGraceTimer) {
+              clearTimeout(controller.clearGraceTimer);
+              controller.clearGraceTimer = null;
+            }
+            controller.handleContinuousGesture("GUN_LEFT", () => {
+              controller.moveNextMainGrid(); // Hand-role delegation: Left Hand Gun controls Main Page Grid
+              setAvatarMood("executing");
+            });
+            setAvatarMood("recognized");
+            if (holdGestureRef.current !== "GUN_LEFT") {
+              holdGestureRef.current = "GUN_LEFT";
+              holdStartRef.current = now;
               setHoldProgress(10);
-              setAvatarMood("recognized");
+            } else {
+              const elapsed = now - holdStartRef.current;
+              setHoldProgress(Math.min(100, Math.round((elapsed / GESTURE_CONFIG.INITIAL_HOLD_DELAY_MS) * 100)));
+            }
+          } else if (activeGestureName === "GUN_RIGHT") {
+            if (controller.clearGraceTimer) {
+              clearTimeout(controller.clearGraceTimer);
+              controller.clearGraceTimer = null;
+            }
+            controller.handleContinuousGesture("GUN_RIGHT", () => {
+              controller.moveNextSidebarItem(); // Hand-role delegation: Right Hand Gun controls Sidebar & Nova
+              setAvatarMood("executing");
+            });
+            setAvatarMood("recognized");
+            if (holdGestureRef.current !== "GUN_RIGHT") {
+              holdGestureRef.current = "GUN_RIGHT";
+              holdStartRef.current = now;
+              setHoldProgress(10);
+            } else {
+              const elapsed = now - holdStartRef.current;
+              setHoldProgress(Math.min(100, Math.round((elapsed / GESTURE_CONFIG.INITIAL_HOLD_DELAY_MS) * 100)));
             }
           } else {
-            if (currentHoldingGestureRef.current !== "None") {
-              currentHoldingGestureRef.current = "None";
+            // Schedule clear with grace period so a single dropped frame doesn't kill the 1.0s hold timer
+            controller.scheduleClearGestureTimers();
+            if (holdGestureRef.current === "GUN_LEFT" || holdGestureRef.current === "GUN_RIGHT") {
+              if (now - holdStartRef.current > 300) {
+                holdGestureRef.current = "None";
+                setHoldProgress(0);
+              }
+            }
+
+            // Thumbs Up: Open focused item dynamically (zero hardcoded redirects)
+            if (activeGestureName === "Thumb_Up") {
+              if (holdGestureRef.current !== "Thumb_Up") {
+                holdGestureRef.current = "Thumb_Up";
+                holdStartRef.current = now;
+                setHoldProgress(25);
+                setAvatarMood("recognized");
+              } else {
+                const elapsed = now - holdStartRef.current;
+                const holdPct = Math.min(100, Math.round((elapsed / 450) * 100));
+                setHoldProgress(holdPct);
+
+                if (elapsed >= 450 && (now - lastTriggeredTimeRef.current > 1200)) {
+                  lastTriggeredTimeRef.current = now;
+                  controller.activateCurrentSelection();
+                  setAvatarMood("executing");
+                  triggerAvatarResponse("✨ Opened focused box!", "thumbs_up", "Opened focused box.");
+                  holdGestureRef.current = "None";
+                  setHoldProgress(0);
+                }
+              }
+            } else if (activeGestureName === "Pointing_Up") {
+              // Legacy gesture: Point Up -> Course Library
+              if (holdGestureRef.current !== "Pointing_Up") {
+                holdGestureRef.current = "Pointing_Up";
+                holdStartRef.current = now;
+                setHoldProgress(30);
+                setAvatarMood("recognized");
+              } else {
+                const elapsed = now - holdStartRef.current;
+                setHoldProgress(Math.min(100, Math.round((elapsed / 400) * 100)));
+                if (elapsed >= 400 && (now - lastTriggeredTimeRef.current > 1500)) {
+                  lastTriggeredTimeRef.current = now;
+                  if (controller.legacyCommands["INDEX_FINGER_UP"]) {
+                    controller.legacyCommands["INDEX_FINGER_UP"]();
+                  }
+                  triggerAvatarResponse("📚 Opening Course Library...", "point_courses", "Opening Course Library.");
+                  holdGestureRef.current = "None";
+                  setHoldProgress(0);
+                }
+              }
+            } else if (activeGestureName === "Victory") {
+              // Legacy gesture: Victory -> Home Dashboard
+              if (holdGestureRef.current !== "Victory") {
+                holdGestureRef.current = "Victory";
+                holdStartRef.current = now;
+                setHoldProgress(30);
+                setAvatarMood("recognized");
+              } else {
+                const elapsed = now - holdStartRef.current;
+                setHoldProgress(Math.min(100, Math.round((elapsed / 400) * 100)));
+                if (elapsed >= 400 && (now - lastTriggeredTimeRef.current > 1500)) {
+                  lastTriggeredTimeRef.current = now;
+                  if (controller.legacyCommands["VICTORY"]) {
+                    controller.legacyCommands["VICTORY"]();
+                  }
+                  triggerAvatarResponse("🏠 Returning to Home Dashboard...", "wave", "Returning home.");
+                  holdGestureRef.current = "None";
+                  setHoldProgress(0);
+                }
+              }
+            } else if (activeGestureName === "Closed_Fist") {
+              // Legacy gesture: Fist -> Back / Close
+              if (holdGestureRef.current !== "Closed_Fist") {
+                holdGestureRef.current = "Closed_Fist";
+                holdStartRef.current = now;
+                setHoldProgress(30);
+                setAvatarMood("recognized");
+              } else {
+                const elapsed = now - holdStartRef.current;
+                setHoldProgress(Math.min(100, Math.round((elapsed / 400) * 100)));
+                if (elapsed >= 400 && (now - lastTriggeredTimeRef.current > 1500)) {
+                  lastTriggeredTimeRef.current = now;
+                  if (controller.legacyCommands["FIST"]) {
+                    controller.legacyCommands["FIST"]();
+                  }
+                  triggerAvatarResponse("🔙 Navigating back...", "nod", "Going back.");
+                  holdGestureRef.current = "None";
+                  setHoldProgress(0);
+                }
+              }
+            } else if (activeGestureName === "Open_Palm") {
+              // Help trigger if hand held stationary
+              if (holdGestureRef.current !== "Open_Palm") {
+                holdGestureRef.current = "Open_Palm";
+                holdStartRef.current = now;
+                setHoldProgress(25);
+              } else {
+                const elapsed = now - holdStartRef.current;
+                setHoldProgress(Math.min(100, Math.round((elapsed / 700) * 100)));
+                if (elapsed >= 700 && (now - lastTriggeredTimeRef.current > 2000)) {
+                  lastTriggeredTimeRef.current = now;
+                  if (controller.legacyCommands["OPEN_PALM"]) {
+                    controller.legacyCommands["OPEN_PALM"]();
+                  }
+                  triggerAvatarResponse("✋ Help and sign guide opened.", "wave", "Help and sign guide opened.");
+                  holdGestureRef.current = "None";
+                  setHoldProgress(0);
+                }
+              }
+            } else {
+              holdGestureRef.current = "None";
               setHoldProgress(0);
             }
           }
         } else {
-          setDetectedGesture("None");
-          setDetectedConfidence(0);
+          // Hand not in view
+          controller.clearGestureTimers();
+          controller.smoothY = null;
+          activeGestureName = "None";
+          confidenceScore = 0;
+          holdGestureRef.current = "None";
           setHoldProgress(0);
-          currentHoldingGestureRef.current = "None";
         }
+
+        setDetectedGesture(activeGestureName);
+        setDetectedConfidence(confidenceScore);
       }
     }
 
