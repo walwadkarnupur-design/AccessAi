@@ -6,6 +6,7 @@
  * and promotion to shared knowledge.
  */
 import API from "./api";
+import { DEMO_COHORT_STUDENTS } from "../data/simulatedCohortData";
 
 const MEKO_STORAGE_KEY_PREFIX = "accessai_meko_datapack_";
 
@@ -16,23 +17,32 @@ export const MEKO_CONFIG = {
   USE_MOCK: process.env.REACT_APP_MEKO_USE_MOCK === "true",
 };
 
-// Default seeded memory for demo / offline fallback
-const DEFAULT_STUDENT_MEMORIES = [
-  {
-    id: "mem-1",
-    text: "Student prefers slower voice explanation speed (0.85x) for code syntax and logic.",
-    category: "accessibility_preference",
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    promoted: false
-  },
-  {
-    id: "mem-2",
-    text: "Student struggled with Python def keyword and indentation in Lesson 1.",
-    category: "learning_misconception",
-    timestamp: new Date(Date.now() - 1800000).toISOString(),
-    promoted: true
+// Comprehensive 90-Student Persistent Memories for Meko Datapack (30 Deaf, 30 Blind, 30 Motor)
+export const COHORT_STUDENT_MEMORIES = (DEMO_COHORT_STUDENTS || []).map((s) => {
+  const acc = s.accommodations || {};
+  let accStr = "";
+  if (s.mode === "deaf") {
+    accStr = `Captions: ${acc.captions || "Cyan"}, Speed: ${acc.speed || "0.75x"}, Sign: ${acc.signLanguage || "ASL"}, Hold: ${acc.gestureHoldWindow || "640ms"}`;
+  } else if (s.mode === "blind") {
+    accStr = `Screen Reader: ${acc.screenReader || "NVDA"}, Speed: ${acc.speed || "0.95x"}, Pitch Cues: ${acc.indentationCues || "Audio Tone"}`;
+  } else {
+    accStr = `Dwell: ${acc.dwellClickTimer || "1.4s"}, Hit Target: ${acc.hitTargetMinSize || "48px"}, Input: ${acc.inputMethod || "Single Switch"}`;
   }
-];
+  const friction = s.learningActivity?.accessibilityFriction || {};
+  return {
+    id: `mem-${s.id}`,
+    studentId: s.id,
+    studentName: s.name,
+    mode: s.mode,
+    category: `${s.mode}_accommodation`,
+    text: `[Durable Student Profile - ${s.name} (${s.id})]: Mode: ${s.mode.toUpperCase()} (${s.categoryLabel}). Language: ${s.language}. Accommodations: ${accStr}. Learning Friction: ${friction.issueName || "Pacing"} - ${friction.details || "Requires accommodation tuning."}`,
+    timestamp: new Date(Date.now() - (s.studyMinutes || 60) * 60000).toISOString(),
+    promoted: false,
+    isDemo: true
+  };
+});
+
+export const DEFAULT_STUDENT_MEMORIES = COHORT_STUDENT_MEMORIES;
 
 const DEFAULT_SHARED_COURSE_KNOWLEDGE = [
   {
@@ -158,11 +168,26 @@ export const MekoService = {
       if (!stored) {
         const initial = datapackId.includes("shared") 
           ? DEFAULT_SHARED_COURSE_KNOWLEDGE 
-          : DEFAULT_STUDENT_MEMORIES;
+          : COHORT_STUDENT_MEMORIES;
         localStorage.setItem(`${MEKO_STORAGE_KEY_PREFIX}${datapackId}`, JSON.stringify(initial));
         return initial;
       }
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      // Ensure the complete 90-student cohort memories are present in student datapack
+      if (datapackId === "student-voice-memory" || datapackId.includes("student")) {
+        if (!Array.isArray(parsed) || parsed.length < 90) {
+          const existingIds = new Set((parsed || []).map((p) => p.id));
+          const merged = [...(parsed || [])];
+          for (const m of COHORT_STUDENT_MEMORIES) {
+            if (!existingIds.has(m.id)) {
+              merged.push(m);
+            }
+          }
+          localStorage.setItem(`${MEKO_STORAGE_KEY_PREFIX}${datapackId}`, JSON.stringify(merged));
+          return merged;
+        }
+      }
+      return parsed;
     } catch (e) {
       return [];
     }

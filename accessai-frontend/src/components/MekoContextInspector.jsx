@@ -13,6 +13,8 @@ export default function MekoContextInspector({
   const [buildDecisions, setBuildDecisions] = useState([]);
   const [activeTab, setActiveTab] = useState("build"); // "build" | "student" | "shared" | "search"
   const [isOpen, setIsOpen] = useState(false);
+  const [studentFilterMode, setStudentFilterMode] = useState("all");
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
   const [mekoStatus, setMekoStatus] = useState("checking");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -133,6 +135,20 @@ export default function MekoContextInspector({
       setTimeout(() => setAddStatus(null), 3000);
     }
   };
+
+  const filteredStudentMemories = studentMemories.filter((m) => {
+    if (studentFilterMode !== "all" && m.mode !== studentFilterMode) return false;
+    if (studentSearchQuery) {
+      const q = studentSearchQuery.toLowerCase();
+      return (
+        (m.studentName && m.studentName.toLowerCase().includes(q)) ||
+        (m.studentId && m.studentId.toLowerCase().includes(q)) ||
+        (m.text && m.text.toLowerCase().includes(q)) ||
+        (m.category && m.category.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
 
   return (
     <>
@@ -301,40 +317,117 @@ export default function MekoContextInspector({
                     No student episodic memories extracted yet.
                   </div>
                 ) : (
-                  studentMemories.map((m) => (
-                    <div
-                      key={m.id}
-                      className="p-3.5 rounded-2xl bg-slate-800 border border-slate-700/80 flex flex-col gap-1.5"
-                    >
-                      <div className="flex items-center justify-between text-[10px] text-slate-400">
-                        <span className="uppercase font-semibold tracking-wider text-blue-400">
-                          {m.category}
-                        </span>
-                        {m.promoted && (
-                          <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded-full font-bold">
-                            Promoted
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-slate-200 leading-relaxed text-[11px]">{m.text}</p>
-                      <div className="flex justify-end gap-2 pt-1.5 border-t border-slate-700/40">
-                        {!m.promoted && (
-                          <button
-                            onClick={() => handlePromote(m.id)}
-                            className="text-[11px] text-blue-300 hover:text-blue-200 hover:underline cursor-pointer"
-                          >
-                            Promote to Shared
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleForget(m.id)}
-                          className="text-[11px] text-rose-400 hover:text-rose-300 hover:underline cursor-pointer"
-                        >
-                          Forget
-                        </button>
-                      </div>
+                  <div className="space-y-3">
+                    {/* Category Filter Pills */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+                      <button
+                        onClick={() => setStudentFilterMode("all")}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          studentFilterMode === "all"
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700"
+                        }`}
+                      >
+                        All ({studentMemories.length})
+                      </button>
+                      <button
+                        onClick={() => setStudentFilterMode("deaf")}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          studentFilterMode === "deaf"
+                            ? "bg-indigo-600 text-white shadow-xs"
+                            : "bg-indigo-950/70 text-indigo-300 hover:text-indigo-200 border border-indigo-800/60"
+                        }`}
+                      >
+                        🤟 Deaf ({studentMemories.filter((m) => m.mode === "deaf").length})
+                      </button>
+                      <button
+                        onClick={() => setStudentFilterMode("blind")}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          studentFilterMode === "blind"
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "bg-blue-950/70 text-blue-300 hover:text-blue-200 border border-blue-800/60"
+                        }`}
+                      >
+                        🎙️ Blind ({studentMemories.filter((m) => m.mode === "blind").length})
+                      </button>
+                      <button
+                        onClick={() => setStudentFilterMode("motor")}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          studentFilterMode === "motor"
+                            ? "bg-teal-600 text-white shadow-xs"
+                            : "bg-teal-950/70 text-teal-300 hover:text-teal-200 border border-teal-800/60"
+                        }`}
+                      >
+                        🎯 Motor ({studentMemories.filter((m) => m.mode === "motor").length})
+                      </button>
                     </div>
-                  ))
+
+                    {/* Search Bar */}
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-2 text-slate-400 !text-sm">search</span>
+                      <input
+                        type="text"
+                        value={studentSearchQuery}
+                        onChange={(e) => setStudentSearchQuery(e.target.value)}
+                        placeholder="Search 90 individual student memories..."
+                        className="w-full bg-slate-800/90 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
+                      />
+                    </div>
+
+                    {/* Student Memory Cards */}
+                    <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+                      {filteredStudentMemories.map((m) => (
+                        <div
+                          key={m.id}
+                          className="p-3.5 rounded-2xl bg-slate-800 border border-slate-700/80 hover:border-blue-500/30 transition-colors flex flex-col gap-1.5 shadow-xs"
+                        >
+                          <div className="flex items-center justify-between text-[10px]">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-blue-300">
+                                {m.studentName ? `${m.studentName} (${m.studentId})` : m.id}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                  m.mode === "deaf"
+                                    ? "bg-indigo-950 text-indigo-300 border border-indigo-800"
+                                    : m.mode === "blind"
+                                    ? "bg-blue-950 text-blue-300 border border-blue-800"
+                                    : "bg-teal-950 text-teal-300 border border-teal-800"
+                                }`}
+                              >
+                                {m.mode ? m.mode.toUpperCase() : m.category}
+                              </span>
+                            </div>
+                            {m.promoted && (
+                              <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded-full font-bold text-[9px]">
+                                Promoted
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-slate-200 leading-relaxed text-[11px]">{m.text}</p>
+                          <div className="flex justify-between items-center pt-1.5 border-t border-slate-700/40 text-[10px] text-slate-400">
+                            <span className="font-mono text-[9px] text-slate-500">scope: student-voice-memory</span>
+                            <div className="flex items-center gap-2">
+                              {!m.promoted && (
+                                <button
+                                  onClick={() => handlePromote(m.id)}
+                                  className="text-blue-300 hover:text-blue-200 hover:underline cursor-pointer font-medium"
+                                >
+                                  Promote to Shared
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleForget(m.id)}
+                                className="text-rose-400 hover:text-rose-300 hover:underline cursor-pointer"
+                              >
+                                Forget
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )
               ) : activeTab === "shared" ? (
                 sharedKnowledge.length === 0 ? (
