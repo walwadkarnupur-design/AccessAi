@@ -31,6 +31,7 @@ export default function TeacherMeetingRoom() {
   const [remoteStudentStream, setRemoteStudentStream] = useState(null);
   const [remoteStudentActive, setRemoteStudentActive] = useState(false);
   const [videoLayout, setVideoLayout] = useState("split"); // 'split' | 'student_focus' | 'teacher_focus'
+  const [latestStudentSign, setLatestStudentSign] = useState(null);
   const remoteStudentVideoRef = useRef(null);
 
   // Participants & Messages
@@ -90,6 +91,12 @@ export default function TeacherMeetingRoom() {
     // Listen for incoming messages from students (text, signs, quick responses)
     const unsubMsg = channel.onMessage((msg) => {
       setMessages((prev) => [...prev, msg]);
+
+      // Pop up floating student sign overlay badge
+      if (msg.messageType === "sign_to_text") {
+        setLatestStudentSign(msg);
+        setTimeout(() => setLatestStudentSign(null), 6000);
+      }
 
       // Speak incoming student messages aloud for the teacher if enabled
       if (ttsStudentAudioRef.current && (msg.messageType === "text_message" || msg.messageType === "sign_to_text")) {
@@ -517,7 +524,7 @@ export default function TeacherMeetingRoom() {
               <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20">
                 <span className="px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-medium border border-white/10 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>Broadcasting to Students</span>
+                  <span>Teacher Broadcast (You) • Broadcasting to Students</span>
                 </span>
                 {gestureActive && videoLayout !== "student_focus" && (
                   <span className="px-2 py-0.5 rounded-full bg-cyan-500/30 backdrop-blur-md text-cyan-200 text-[10px] font-medium border border-cyan-400/20 hidden sm:flex items-center gap-1">
@@ -610,7 +617,7 @@ export default function TeacherMeetingRoom() {
               <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5">
                 <span className="px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-medium border border-white/10 flex items-center gap-1.5">
                   <span className={`w-2 h-2 rounded-full ${remoteStudentActive ? "bg-emerald-400 animate-pulse" : studentParticipant ? "bg-sky-400" : "bg-amber-400"}`} />
-                  <span>{studentParticipant?.name || "Student Participant"}</span>
+                  <span>Remote Student: {studentParticipant?.name || "Student Participant"} (Live WebRTC P2P)</span>
                 </span>
                 {remoteStudentActive && (
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 backdrop-blur-md text-emerald-300 text-[10px] font-bold border border-emerald-500/30 flex items-center gap-1">
@@ -619,6 +626,19 @@ export default function TeacherMeetingRoom() {
                   </span>
                 )}
               </div>
+
+              {/* Live Student Sign Overlay Badge */}
+              {latestStudentSign && remoteStudentActive && (
+                <div className="absolute bottom-3 left-3 right-3 z-30 px-3 py-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-cyan-500/40 text-cyan-200 text-xs font-bold flex items-center justify-between shadow-xl">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined !text-sm text-cyan-400">sign_language</span>
+                    <span>Student Sign: &quot;{latestStudentSign.text}&quot;</span>
+                  </div>
+                  <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 font-mono text-[10px]">
+                    {Math.round((latestStudentSign.confidence || 0.95) * 100)}%
+                  </span>
+                </div>
+              )}
 
               {/* If Student Video is NOT streaming: Show Accessible Presence Card or Waiting State */}
               {(!remoteStudentActive || !remoteStudentStream) && (

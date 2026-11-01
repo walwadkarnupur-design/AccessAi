@@ -11,6 +11,7 @@
  */
 
 import { supabase } from "./supabase";
+import { Peer } from "peerjs";
 
 const STORAGE_PREFIX = "accessai_meeting_msg_";
 
@@ -37,10 +38,20 @@ export class MeetingChannel {
     this.cloudWs = null;
     this.pingInterval = null;
 
-    // Cloud transport endpoints (guarantees cross-device WebRTC & presence across Vercel deployments)
-    const safeRoom = String(this.meetingId || "accessai-room-402").toLowerCase().replace(/[^a-z0-9_-]/g, "_");
-    this.cloudPostUrl = `https://ntfy.sh/accessai_meet_${safeRoom}`;
-    this.cloudWsUrl = `wss://ntfy.sh/accessai_meet_${safeRoom}/ws`;
+    // Cross-Device Cloud Transport using PeerJS (guarantees cross-device WebRTC & presence across mobile and desktop)
+    this.peer = null;
+    this.activePeerConns = new Map();
+    this.isPeerReady = false;
+    this.peerRetryTimer = null;
+    this.isDestroyed = false;
+
+    this.safeRoom = String(this.meetingId || "accessai-room-402").toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+    this.hostPeerId = `accessai_room_${this.safeRoom}_teacher`;
+    const isTeacher = this.currentUser.role === "teacher" || this.currentUser.mode === "teacher";
+    this.isTeacher = isTeacher;
+    this.peerId = isTeacher
+      ? this.hostPeerId
+      : `accessai_room_${this.safeRoom}_student_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
 
     // Active participants mapped by ID
     this.participantsMap = new Map();
@@ -70,6 +81,8 @@ export class MeetingChannel {
       this.pingInterval = setInterval(() => {
         this.pingParticipants();
       }, 4000);
+      this._boundUnload = () => this.destroy();
+      window.addEventListener("beforeunload", this._boundUnload);
     }
   }
 
@@ -119,32 +132,8 @@ export class MeetingChannel {
       console.warn("[MeetingChannel] Supabase realtime channel skipped:", e);
     }
 
-    // 4. Cloud WebSocket Transport (Guarantees Real-Time Cross-Device & Vercel HTTPS Connectivity)
-    if (typeof WebSocket !== "undefined" && this.cloudWsUrl) {
-      try {
-        this.cloudWs = new WebSocket(this.cloudWsUrl);
-        this.cloudWs.onopen = () => {
-          this.announcePresence("joined");
-          this.pingParticipants();
-        };
-        this.cloudWs.onmessage = (event) => {
-          if (event && event.data) {
-            try {
-              const raw = JSON.parse(event.data);
-              if (raw && raw.event === "message" && raw.message) {
-                const inner = typeof raw.message === "string" ? JSON.parse(raw.message) : raw.message;
-                if (inner && inner.messageType) {
-                  this._handleIncoming(inner);
-                }
-              }
-            } catch (e) {}
-          }
-        };
-        this.cloudWs.onerror = () => {};
-      } catch (wsErr) {
-        console.warn("[MeetingChannel] Cloud transport init skipped:", wsErr);
-      }
-    }
+    // 4. Cloud PeerJS Data Transport (Guarantees Real-Time Cross-Device Connectivity without Rate Limits)
+    this._initPeerCloud();
 
     // 5. Local Dev Network Transport via SSE Signaling Server (Port 5001)
     if (typeof window !== "undefined") {
@@ -187,6 +176,118 @@ export class MeetingChannel {
         console.warn("[MeetingChannel] Network signaling init skipped:", err);
       }
     }
+  }
+
+  _initPeerCloud() {
+    if (typeof window === "undefined") return;
+    const hasRTC = Boolean(window.RTCPeerConnection || window.webkitRTCPeerConnection);
+    if (!hasRTC) return;
+
+    try {
+      const peer = new Peer(this.peerId, {
+        host: "0.peerjs.com",
+        secure: true,
+        port: 443,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:global.stun.twilio.com:3478" }
+          ]
+        }
+      });
+      this.peer = peer;
+
+      peer.on("open", (id) => {
+        console.log(`[MeetingChannel] PeerJS cloud signaling ready: ${id}`);
+        this.isPeerReady = true;
+        if (!this.isTeacher) {
+          this._connectPeerToHost();
+        }
+        this.announcePresence("joined");
+        this.pingParticipants();
+      });
+
+      peer.on("connection", (conn) => {
+        console.log(`[MeetingChannel] Incoming peer data connection from ${conn.peer}`);
+        this._setupDataConnection(conn);
+      });
+
+      peer.on("error", (err) => {
+        console.warn("[MeetingChannel] Peer error:", err?.type || err?.message);
+        if (err?.type === "unavailable-id" && this.isTeacher) {
+          console.warn("[MeetingChannel] Teacher host peer ID in use, retrying in 2s...");
+          if (!this.isDestroyed) {
+            try { peer.destroy(); } catch (e) {}
+            clearTimeout(this.peerRetryTimer);
+            this.peerRetryTimer = setTimeout(() => this._initPeerCloud(), 2000);
+          }
+        } else if (err?.type === "peer-unavailable" && !this.isTeacher) {
+          if (!this.isDestroyed) {
+            clearTimeout(this.peerRetryTimer);
+            this.peerRetryTimer = setTimeout(() => this._connectPeerToHost(), 2000);
+          }
+        }
+      });
+    } catch (err) {
+      console.warn("[MeetingChannel] PeerJS init error:", err);
+    }
+  }
+
+  _connectPeerToHost() {
+    if (!this.peer || this.peer.destroyed || this.isTeacher) return;
+    if (this.activePeerConns.has(this.hostPeerId)) {
+      const existing = this.activePeerConns.get(this.hostPeerId);
+      if (existing && existing.open) return;
+    }
+
+    try {
+      const conn = this.peer.connect(this.hostPeerId, { reliable: true });
+      this._setupDataConnection(conn);
+    } catch (err) {
+      console.warn("[MeetingChannel] Connect to host error:", err);
+    }
+  }
+
+  _setupDataConnection(conn) {
+    if (!conn) return;
+    this.activePeerConns.set(conn.peer, conn);
+
+    const handleOpen = () => {
+      console.log(`[MeetingChannel] DataConnection open with ${conn.peer}`);
+      this.announcePresence("joined");
+      this.pingParticipants();
+    };
+
+    if (conn.open) {
+      handleOpen();
+    } else {
+      conn.on("open", handleOpen);
+    }
+
+    conn.on("data", (data) => {
+      if (data && typeof data === "object") {
+        this._handleIncoming(data);
+      } else if (typeof data === "string") {
+        try {
+          const parsed = JSON.parse(data);
+          this._handleIncoming(parsed);
+        } catch (e) {}
+      }
+    });
+
+    conn.on("close", () => {
+      this.activePeerConns.delete(conn.peer);
+      if (!this.isTeacher && !this.isDestroyed) {
+        clearTimeout(this.peerRetryTimer);
+        this.peerRetryTimer = setTimeout(() => this._connectPeerToHost(), 2000);
+      }
+    });
+
+    conn.on("error", () => {
+      this.activePeerConns.delete(conn.peer);
+    });
   }
 
   _handleIncoming(msg) {
@@ -262,6 +363,17 @@ export class MeetingChannel {
   }
 
   _broadcast(message) {
+    // 1. Direct PeerJS Cross-Device DataConnection Delivery (guarantees cross-device sync)
+    if (this.activePeerConns && this.activePeerConns.size > 0) {
+      this.activePeerConns.forEach((conn) => {
+        if (conn && conn.open) {
+          try {
+            conn.send(message);
+          } catch (e) {}
+        }
+      });
+    }
+
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage(message);
@@ -271,17 +383,6 @@ export class MeetingChannel {
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem(`${STORAGE_PREFIX}${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, JSON.stringify(message));
-      } catch (e) {}
-    }
-
-    // Cloud HTTP POST transport (Cross-device cloud delivery)
-    if (this.cloudPostUrl && typeof fetch !== "undefined") {
-      try {
-        fetch(this.cloudPostUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(message)
-        }).catch(() => {});
       } catch (e) {}
     }
 
@@ -515,11 +616,25 @@ export class MeetingChannel {
       this._broadcast(leaveMsg);
     } catch (e) {}
 
-    if (this.cloudWs) {
-      try {
-        this.cloudWs.close();
-      } catch (e) {}
-      this.cloudWs = null;
+    this.isDestroyed = true;
+    if (typeof window !== "undefined" && this._boundUnload) {
+      window.removeEventListener("beforeunload", this._boundUnload);
+    }
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+    }
+    if (this.peerRetryTimer) {
+      clearTimeout(this.peerRetryTimer);
+    }
+    if (this.activePeerConns) {
+      this.activePeerConns.forEach((conn) => {
+        try { conn.close(); } catch (e) {}
+      });
+      this.activePeerConns.clear();
+    }
+    if (this.peer) {
+      try { this.peer.destroy(); } catch (e) {}
+      this.peer = null;
     }
     if (this.broadcastChannel) {
       try {

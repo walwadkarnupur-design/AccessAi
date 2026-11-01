@@ -90,6 +90,12 @@ export default function DeafMeetingRoom() {
     `student-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`
   ).current;
 
+  // Single-device test sign feed simulation
+  const [isSimulatingFeed, setIsSimulatingFeed] = useState(false);
+  const simCanvasRef = useRef(null);
+  const simAnimIdRef = useRef(null);
+  const simIntervalRef = useRef(null);
+
   // DOM Refs
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -219,9 +225,219 @@ export default function DeafMeetingRoom() {
 
   // ── 3. Optional Sign Language Detection Engine (Section 2) ──
   // Camera is initialized ONLY when voluntary cameraActive is true!
+  const stopSimulatedFeed = () => {
+    if (simAnimIdRef.current) {
+      cancelAnimationFrame(simAnimIdRef.current);
+      simAnimIdRef.current = null;
+    }
+    if (simIntervalRef.current) {
+      clearInterval(simIntervalRef.current);
+      simIntervalRef.current = null;
+    }
+    setDetectedSign(null);
+  };
+
+  const startSimulatedFeed = () => {
+    if (engineRef.current) {
+      engineRef.current.stopCamera();
+    }
+
+    let canvas = simCanvasRef.current;
+    if (!canvas) {
+      canvas = document.createElement("canvas");
+      canvas.width = 640;
+      canvas.height = 480;
+      simCanvasRef.current = canvas;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const startTime = Date.now();
+    const demoSigns = [
+      { label: "Hello Everyone", icon: "✋", phrase: "Hello everyone,", conf: 0.98 },
+      { label: "I Agree / Yes", icon: "👍", phrase: "I agree with this proposal.", conf: 0.96 },
+      { label: "Thank You All", icon: "🤟", phrase: "Thank you so much everyone.", conf: 0.99 }
+    ];
+
+    let currentSignIndex = 0;
+
+    const render = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const signIdx = Math.floor((elapsed % 9) / 3);
+      const activeSign = demoSigns[signIdx];
+
+      // 1. Sleek Gradient Dark Canvas Background
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, 480);
+      bgGrad.addColorStop(0, "#090d16");
+      bgGrad.addColorStop(1, "#020617");
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, 640, 480);
+
+      // Subtle cyber grid lines
+      ctx.strokeStyle = "rgba(14, 165, 233, 0.08)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < 640; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, 480);
+        ctx.stroke();
+      }
+      for (let y = 0; y < 480; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(640, y);
+        ctx.stroke();
+      }
+
+      // 2. Student Avatar Silhouette
+      ctx.fillStyle = "#1e293b";
+      ctx.beginPath();
+      ctx.ellipse(320, 430, 160, 100, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#334155";
+      ctx.beginPath();
+      ctx.arc(320, 240, 75, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(320, 255, 30, 0.2 * Math.PI, 0.8 * Math.PI);
+      ctx.stroke();
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.beginPath();
+      ctx.arc(295, 230, 6, 0, Math.PI * 2);
+      ctx.arc(345, 230, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 3. Hand & Skeleton
+      const wave = Math.sin(elapsed * 5) * 15;
+      const handX = 430 + (signIdx === 0 ? wave : 0);
+      const handY = 270 + (signIdx === 1 ? Math.sin(elapsed * 4) * 8 : 0);
+
+      ctx.strokeStyle = "#475569";
+      ctx.lineWidth = 18;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(380, 390);
+      ctx.quadraticCurveTo(440, 360, handX, handY);
+      ctx.stroke();
+
+      ctx.fillStyle = "#64748b";
+      ctx.beginPath();
+      ctx.arc(handX, handY, 32, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#10b981";
+      ctx.lineWidth = 3;
+      const pts = [
+        { x: handX, y: handY },
+        { x: handX - 16, y: handY - 24 },
+        { x: handX - 24, y: handY - 45 },
+        { x: handX - 8, y: handY - 48 },
+        { x: handX + 8, y: handY - 52 },
+        { x: handX + 22, y: handY - 44 },
+        { x: handX + 32, y: handY - 32 }
+      ];
+
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      pts.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.stroke();
+
+      pts.forEach((p) => {
+        ctx.fillStyle = "#34d399";
+        ctx.shadowColor = "#10b981";
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      });
+
+      // Top banner
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.fillRect(16, 16, 608, 48);
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+      ctx.strokeRect(16, 16, 608, 48);
+
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillText("STUDENT SIGN FEED • SINGLE-DEVICE TEST STREAM", 32, 44);
+
+      ctx.fillStyle = "#10b981";
+      ctx.beginPath();
+      ctx.arc(588, 40, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bottom detected sign banner
+      ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+      ctx.fillRect(16, 400, 608, 64);
+      ctx.strokeStyle = "rgba(16, 185, 129, 0.4)";
+      ctx.strokeRect(16, 400, 608, 64);
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "bold 16px sans-serif";
+      ctx.fillText(`🤟 ASL Gesture: ${activeSign.label} ${activeSign.icon}`, 32, 436);
+
+      ctx.fillStyle = "#34d399";
+      ctx.font = "bold 12px monospace";
+      ctx.fillText(`CONFIDENCE: ${Math.round(activeSign.conf * 100)}% • P2P WebRTC`, 430, 436);
+
+      simAnimIdRef.current = requestAnimationFrame(render);
+    };
+
+    render();
+
+    try {
+      const stream = canvas.captureStream ? canvas.captureStream(30) : null;
+      if (stream && videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+
+        if (webrtcRef.current) {
+          webrtcRef.current.addLocalStream(stream);
+        }
+
+        if (channelRef.current) {
+          channelRef.current.sendSignal("broadcast", {
+            type: "camera_state",
+            active: true,
+            studentName: studentName.trim() || user?.displayName || "Deaf Student"
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("captureStream error:", e);
+    }
+
+    simIntervalRef.current = setInterval(() => {
+      const sign = demoSigns[currentSignIndex % demoSigns.length];
+      currentSignIndex++;
+      setDetectedSign({ label: sign.label, score: sign.conf, category: "meeting" });
+      if (channelRef.current) {
+        channelRef.current.sendSignMessage(sign.phrase, sign.conf);
+      }
+    }, 3600);
+  };
+
+  const handleToggleSimulatedFeed = () => {
+    if (isSimulatingFeed) {
+      stopSimulatedFeed();
+      setIsSimulatingFeed(false);
+      setCameraActive(true);
+    } else {
+      setIsSimulatingFeed(true);
+      setCameraActive(true);
+      startSimulatedFeed();
+    }
+  };
+
   useEffect(() => {
-    if (!isJoined || !cameraActive) {
-      if (engineRef.current) {
+    if (!isJoined || !cameraActive || isSimulatingFeed) {
+      if (engineRef.current && !isSimulatingFeed) {
         engineRef.current.stopCamera();
       }
       return;
@@ -308,6 +524,7 @@ export default function DeafMeetingRoom() {
       });
 
     return () => {
+      stopSimulatedFeed();
       if (engine) engine.stopCamera();
       if (webrtcRef.current) {
         webrtcRef.current.removeLocalStream();
@@ -320,11 +537,15 @@ export default function DeafMeetingRoom() {
         });
       }
     };
-  }, [isJoined, cameraActive]);
+  }, [isJoined, cameraActive, isSimulatingFeed]);
 
   // Voluntary Camera Toggle
   const handleToggleCamera = () => {
     setCameraError(null);
+    if (isSimulatingFeed) {
+      stopSimulatedFeed();
+      setIsSimulatingFeed(false);
+    }
     setCameraActive((prev) => !prev);
   };
 
@@ -875,7 +1096,7 @@ export default function DeafMeetingRoom() {
                 <div className="flex items-center justify-between z-10">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-emerald-400 text-lg">cast_for_education</span>
-                    <span className="text-xs font-bold text-emerald-300">Teacher Video Broadcast</span>
+                    <span className="text-xs font-bold text-emerald-300">Teacher Video Broadcast (Prof. Ananya Rao)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {remoteVideoActive && (
@@ -959,9 +1180,22 @@ export default function DeafMeetingRoom() {
                 <div className="flex items-center justify-between z-10">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-sky-400 text-lg">person</span>
-                    <span className="text-xs font-bold text-sky-300">Your Student Sign Camera</span>
+                    <span className="text-xs font-bold text-sky-300">Your Student Sign Camera (MediaPipe Live)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleToggleSimulatedFeed}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                        isSimulatingFeed
+                          ? "bg-purple-600/30 border-purple-400 text-purple-200"
+                          : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                      }`}
+                      title="Simulate student sign feed for single-device test"
+                    >
+                      <span className="material-symbols-outlined !text-xs">smart_toy</span>
+                      <span>{isSimulatingFeed ? "Demo Feed: ON" : "Demo Sign Feed"}</span>
+                    </button>
                     {detectedSign && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                         <span className="material-symbols-outlined !text-xs">sign_language</span>

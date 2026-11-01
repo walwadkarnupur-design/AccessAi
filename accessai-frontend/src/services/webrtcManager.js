@@ -68,10 +68,18 @@ export class WebRtcManager {
           frameRate: { ideal: 30 }
         } : false;
 
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
-          audio: audio ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false
-        });
+        try {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: audio ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false
+          });
+        } catch (strictErr) {
+          console.warn("[WebRTC] Strict constraints failed, falling back to basic media:", strictErr);
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            video: video ? true : false,
+            audio: audio ? true : false
+          });
+        }
 
         // Lock hardware / browser digital zoom and auto-framing to 1.0x (stable)
         try {
