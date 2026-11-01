@@ -141,7 +141,23 @@ export default function TeacherDashboard() {
   const [demoInterventions, setDemoInterventions] = useState(() => getDemoInterventionHistory());
   const [demoFilterMode, setDemoFilterMode] = useState("all"); // "all" | "deaf" | "blind" | "motor"
   const [demoSearch, setDemoSearch] = useState("");
+  const [rosterFilterMode, setRosterFilterMode] = useState("all");
+  const [rosterSearch, setRosterSearch] = useState("");
   const [interventionToast, setInterventionToast] = useState(null);
+
+  const filteredRosterStudents = students.filter((s) => {
+    if (rosterFilterMode !== "all" && s.mode !== rosterFilterMode) return false;
+    if (rosterSearch) {
+      const q = rosterSearch.toLowerCase();
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q) ||
+        (s.mode && s.mode.toLowerCase().includes(q)) ||
+        (s.id && s.id.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
 
   // ── RN (Realtime Network) State ──
   const [rnConnected, setRnConnected] = useState(false);
@@ -175,57 +191,23 @@ export default function TeacherDashboard() {
         }
       } catch (err) {}
 
-      // Fallback demo students
-      const demoDefaults = [
-        {
-          id: "active-student-session",
-          name: "Vrusha Goyal",
-          email: "goyalvrusha@gmail.com",
-          mode: "deaf",
-          enrolledCourses: 3,
-          progress: 82,
-          assessmentScore: "94%",
-          lastActive: "Active now"
-        },
-        {
-          id: "student-aman-blind",
-          name: "Aman Halkude",
-          email: "amanhalkude7750+blind@gmail.com",
-          mode: "blind",
-          enrolledCourses: 4,
-          progress: 76,
-          assessmentScore: "88%",
-          lastActive: "Active today"
-        },
-        {
-          id: "student-aarav-motor",
-          name: "Aarav Patel",
-          email: "aarav.patel@accessai.edu",
-          mode: "motor",
-          enrolledCourses: 2,
-          progress: 68,
-          assessmentScore: "85%",
-          lastActive: "Active 2h ago"
-        },
-        {
-          id: "student-priya-deaf",
-          name: "Priya Sharma",
-          email: "priya.sharma@accessai.edu",
-          mode: "deaf",
-          enrolledCourses: 3,
-          progress: 90,
-          assessmentScore: "96%",
-          lastActive: "Active yesterday"
-        }
-      ];
-
-      for (const d of demoDefaults) {
-        if (!fetchedList.some((s) => s.name === d.name)) {
-          fetchedList.push(d);
+      // Load the comprehensive 90-Student Simulated Demo Cohort
+      const demoCohortList = getActiveDemoCohort();
+      const combined = [...fetchedList];
+      for (const d of demoCohortList) {
+        if (!combined.some((s) => s.id === d.id || s.name === d.name)) {
+          combined.push({
+            ...d,
+            enrolledCourses: d.enrolledCourses || (d.learningActivity?.currentCourse ? 3 : 2),
+            progress: d.progress || 78,
+            assessmentScore: d.assessmentScore || "88%",
+            lastActive: d.lastActive || "Active today",
+            isDemo: true
+          });
         }
       }
 
-      setStudents(fetchedList);
+      setStudents(combined);
     } catch (err) {
       console.warn("Could not fetch students:", err);
       setStudents([]);
@@ -305,6 +287,7 @@ export default function TeacherDashboard() {
     setDemoCohort(fresh);
     setDemoAnalytics(computeCohortAnalytics(fresh));
     setDemoInterventions(getDemoInterventionHistory());
+    setStudents(fresh);
     setInterventionToast("90-Student Demo Dataset reset successfully. Real student records remain untouched.");
     setTimeout(() => setInterventionToast(null), 4000);
   };
@@ -512,6 +495,9 @@ export default function TeacherDashboard() {
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Cohort</p>
                     <h3 className="text-2xl font-black text-slate-900 mt-0.5">{students.length} Students</h3>
+                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                      {students.filter((s) => s.mode === "deaf").length} Deaf · {students.filter((s) => s.mode === "blind").length} Blind · {students.filter((s) => s.mode === "motor").length} Motor
+                    </p>
                   </div>
                 </div>
 
@@ -568,28 +554,39 @@ export default function TeacherDashboard() {
                   </div>
 
                   <div className="divide-y divide-slate-100">
-                    {students.slice(0, 4).map((s) => (
+                    {students.slice(0, 6).map((s) => (
                       <div key={s.id} className="py-3 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-blue-50 text-[#0866F5] font-bold text-xs flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-full bg-blue-50 text-[#0866F5] font-bold text-xs flex items-center justify-center shrink-0">
                             {s.name.charAt(0)}
                           </div>
                           <div>
-                            <span className="text-xs font-bold text-slate-900 block leading-tight">{s.name}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-900 block leading-tight">{s.name}</span>
+                              {s.isDemo && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                                  DEMO
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[11px] text-slate-500">{s.email}</span>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-700">
-                            {s.mode === "deaf" ? "🤟 Deaf Mode" : s.mode === "blind" ? "🎙️ Blind Mode" : "🎯 Motor Mode"}
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            s.mode === "deaf" ? "bg-indigo-50 text-indigo-700 border border-indigo-200" :
+                            s.mode === "blind" ? "bg-blue-50 text-[#0866F5] border border-blue-200" :
+                            "bg-teal-50 text-teal-700 border border-teal-200"
+                          }`}>
+                            {s.mode.toUpperCase()}
                           </span>
                           <span className="text-xs font-extrabold text-[#0866F5]">{s.progress}%</span>
                           <button
                             onClick={() => {
                               setSelectedStudent(s);
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-[#0866F5] hover:text-white text-[11px] font-bold text-slate-700 transition-all cursor-pointer"
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-[#0866F5] hover:text-white text-[11px] font-bold text-slate-700 transition-all cursor-pointer shadow-2xs"
                           >
                             Inspect
                           </button>
@@ -1179,18 +1176,23 @@ export default function TeacherDashboard() {
             <div className="flex flex-col gap-4 animate-fadeIn">
               <div className="flex justify-between items-center flex-wrap gap-3">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Enrolled Student Directory</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-slate-900">Enrolled Student Directory</h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-extrabold uppercase">
+                      {students.length} Learners Loaded
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500">
-                    Inspect student profiles, accommodation settings, and individual learning progress.
+                    Inspect individual accommodation settings, learning friction traces, and assessment scores across all 90 students.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setActiveTab("analytics")}
-                    className="px-3.5 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-xs font-bold text-amber-900 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                    className="px-3.5 py-1.5 rounded-xl border border-blue-300 bg-blue-50 hover:bg-blue-100 text-xs font-bold text-[#0866F5] flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                   >
                     <span>📊</span>
-                    <span>View 90 Simulated Demo Cohort</span>
+                    <span>View Cognitive Analytics Suite</span>
                   </button>
                   <button
                     onClick={fetchStudents}
@@ -1205,13 +1207,73 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
+              {/* Roster Category Filter Pills and Search Input */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                  <button
+                    onClick={() => setRosterFilterMode("all")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      rosterFilterMode === "all"
+                        ? "bg-[#0866F5] text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    All Cohort ({students.length})
+                  </button>
+                  <button
+                    onClick={() => setRosterFilterMode("deaf")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                      rosterFilterMode === "deaf"
+                        ? "bg-indigo-600 text-white shadow-2xs"
+                        : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60"
+                    }`}
+                  >
+                    <span>🤟</span>
+                    <span>Deaf / Sign ({students.filter((s) => s.mode === "deaf").length})</span>
+                  </button>
+                  <button
+                    onClick={() => setRosterFilterMode("blind")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                      rosterFilterMode === "blind"
+                        ? "bg-blue-600 text-white shadow-2xs"
+                        : "bg-blue-50 text-[#0866F5] hover:bg-blue-100 border border-blue-200/60"
+                    }`}
+                  >
+                    <span>🎙️</span>
+                    <span>Blind / Voice ({students.filter((s) => s.mode === "blind").length})</span>
+                  </button>
+                  <button
+                    onClick={() => setRosterFilterMode("motor")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                      rosterFilterMode === "motor"
+                        ? "bg-teal-600 text-white shadow-2xs"
+                        : "bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200/60"
+                    }`}
+                  >
+                    <span>🎯</span>
+                    <span>Motor / Hands-Free ({students.filter((s) => s.mode === "motor").length})</span>
+                  </button>
+                </div>
+
+                <div className="relative min-w-[240px]">
+                  <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 !text-sm">search</span>
+                  <input
+                    type="text"
+                    value={rosterSearch}
+                    onChange={(e) => setRosterSearch(e.target.value)}
+                    placeholder="Search 90 students by name, email, mode..."
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-[#0866F5] focus:bg-white text-slate-800"
+                  />
+                </div>
+              </div>
+
               {/* Student Table */}
               <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-h-[640px]">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50/80 text-slate-500 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
+                    <thead className="bg-slate-50/95 text-slate-500 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200 sticky top-0 backdrop-blur-xs z-10">
                       <tr>
-                        <th className="py-3.5 px-6">Student</th>
+                        <th className="py-3.5 px-6">Student ({filteredRosterStudents.length})</th>
                         <th className="py-3.5 px-4">Accommodation Mode</th>
                         <th className="py-3.5 px-4">Courses</th>
                         <th className="py-3.5 px-4">Progress</th>
@@ -1221,20 +1283,27 @@ export default function TeacherDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {students.map((student) => (
+                      {filteredRosterStudents.map((student) => (
                         <tr key={student.id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-4 px-6">
+                          <td className="py-3.5 px-6">
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-blue-100 text-[#0866F5] font-bold flex items-center justify-center text-xs shrink-0">
                                 {student.name.charAt(0).toUpperCase()}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-900 block leading-tight">{student.name}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900 block leading-tight">{student.name}</span>
+                                  {student.isDemo && (
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                                      DEMO
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-xs text-slate-400">{student.email}</span>
                               </div>
                             </div>
                           </td>
-                          <td className="py-4 px-4">
+                          <td className="py-3.5 px-4">
                             {student.mode === "deaf" ? (
                               <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold inline-flex items-center gap-1">
                                 <span>🤟</span> Deaf / Sign Mode
@@ -1249,10 +1318,10 @@ export default function TeacherDashboard() {
                               </span>
                             )}
                           </td>
-                          <td className="py-4 px-4 font-semibold text-slate-800">
+                          <td className="py-3.5 px-4 font-semibold text-slate-800">
                             {student.enrolledCourses} Enrolled
                           </td>
-                          <td className="py-4 px-4">
+                          <td className="py-3.5 px-4">
                             <div className="flex items-center gap-2">
                               <div className="w-24 bg-slate-100 h-2 rounded-full overflow-hidden">
                                 <div
@@ -1263,15 +1332,15 @@ export default function TeacherDashboard() {
                               <span className="text-xs font-bold text-slate-700">{student.progress}%</span>
                             </div>
                           </td>
-                          <td className="py-4 px-4">
+                          <td className="py-3.5 px-4">
                             <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
                               {student.assessmentScore}
                             </span>
                           </td>
-                          <td className="py-4 px-4 text-xs text-slate-500 font-medium">
+                          <td className="py-3.5 px-4 text-xs text-slate-500 font-medium">
                             {student.lastActive}
                           </td>
-                          <td className="py-4 px-6 text-right">
+                          <td className="py-3.5 px-6 text-right">
                             <button
                               onClick={() => setSelectedStudent(student)}
                               className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-[#0866F5] hover:text-white text-xs font-bold text-slate-700 transition-all cursor-pointer shadow-2xs"
