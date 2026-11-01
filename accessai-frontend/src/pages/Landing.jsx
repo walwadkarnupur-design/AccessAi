@@ -175,7 +175,7 @@ export default function Landing() {
     return demoAccounts.find((d) => d.mode === selected) || null;
   }, [selected]);
   const navigate = useNavigate();
-  const { loginDemoUser, DEMO_MODE, user, disabilityType, logout } = useAuth();
+  const { loginDemoUser, DEMO_MODE, user, disabilityType, logout, role } = useAuth();
 
   const modes = useMemo(() => [
     {
@@ -306,7 +306,7 @@ export default function Landing() {
       if (window.speechSynthesis && window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
-      playGreeting(false);
+      playGreeting(true);
       removeGestureListeners();
     };
 
@@ -361,16 +361,19 @@ export default function Landing() {
   }, [speakText, resumeListening, setSelectedWithRef, stop, setAgentState, setSpeechBubble]);
 
   const selectBlindMode = useCallback(() => {
+    setLandingStep("mode");
     selectMode("blind", true);
-  }, [selectMode]);
+  }, [selectMode, setLandingStep]);
 
   const selectMotorMode = useCallback(() => {
+    setLandingStep("mode");
     selectMode("motor", true);
-  }, [selectMode]);
+  }, [selectMode, setLandingStep]);
 
   const selectDeafMode = useCallback(() => {
+    setLandingStep("mode");
     selectMode("deaf", false);
-  }, [selectMode]);
+  }, [selectMode, setLandingStep]);
 
   const handleLoginRedirect = useCallback(() => {
     if (!selected) return;
@@ -411,10 +414,21 @@ export default function Landing() {
     setAgentState(STATE_SPEAKING);
     setDebugStatus("Speaking...");
     stop();
+    loginDemoUser(targetMode);
+
+    let navigated = false;
+    const proceed = () => {
+      if (!navigated) {
+        navigated = true;
+        navigate(`/${targetMode}`);
+      }
+    };
+
     speakText(replyText, () => {
-      loginDemoUser(targetMode);
-      navigate(`/${targetMode}`);
+      proceed();
     });
+    // Navigation fallback timer so user is never stuck if speech synthesis is delayed or blocked
+    setTimeout(proceed, 1200);
   }, [selected, speakText, loginDemoUser, navigate, stop, setAgentState]);
 
   const openLogin = useCallback(() => {
@@ -470,14 +484,20 @@ export default function Landing() {
     let normalized = text.toLowerCase().trim();
 
     // Exact mapping matches
-    if (normalized === "log in" || normalized === "login" || normalized.includes("log in") || normalized.includes("login")) {
+    if (normalized === "log in" || normalized === "login" || normalized.includes("log in") || normalized.includes("login") || normalized.includes("sign in") || normalized.includes("signin")) {
       return "login";
     }
-    if (normalized === "sign up" || normalized === "signup" || normalized.includes("sign up") || normalized.includes("signup")) {
+    if (normalized === "sign up" || normalized === "signup" || normalized.includes("sign up") || normalized.includes("signup") || normalized.includes("register")) {
       return "signup";
     }
-    if (normalized === "register" || normalized.includes("register")) {
-      return "signup";
+    if (normalized.includes("start blind") || normalized.includes("open blind") || normalized.includes("launch blind")) {
+      return "start blind";
+    }
+    if (normalized.includes("start deaf") || normalized.includes("open deaf") || normalized.includes("launch deaf")) {
+      return "start deaf";
+    }
+    if (normalized.includes("start motor") || normalized.includes("open motor") || normalized.includes("launch motor")) {
+      return "start motor";
     }
     if (normalized === "blind" || normalized === "blind mode" || normalized.includes("blind")) {
       return "blind mode";
@@ -485,8 +505,17 @@ export default function Landing() {
     if (normalized === "motor" || normalized === "motor mode" || normalized.includes("motor")) {
       return "motor mode";
     }
-    if (normalized === "deaf" || normalized === "deaf mode" || normalized.includes("deaf")) {
+    if (normalized === "deaf" || normalized === "deaf mode" || normalized.includes("deaf") || normalized.includes("mute")) {
       return "deaf mode";
+    }
+    if (normalized === "student" || normalized === "student mode" || normalized.includes("student")) {
+      return "student";
+    }
+    if (normalized === "teacher" || normalized === "teacher mode" || normalized.includes("teacher") || normalized.includes("educator")) {
+      return "teacher";
+    }
+    if (normalized === "start" || normalized === "go" || normalized === "enter" || normalized === "proceed" || normalized === "continue") {
+      return "start";
     }
     if (normalized === "demo" || normalized === "demo mode" || normalized.includes("demo account") || normalized.includes("demo")) {
       return "demo mode";
@@ -509,6 +538,90 @@ export default function Landing() {
 
   // Intent detection and callback mapper
   const detectIntent = useCallback((normalizedText) => {
+    if (normalizedText === "student") {
+      return {
+        intent: "SELECT_ROLE",
+        entity: "student",
+        action: () => {
+          setLandingStep("mode");
+          const replyText = "Student mode active. Please choose Blind Mode, Deaf Mode, or Motor Mode.";
+          setAgentState(STATE_SPEAKING);
+          setDebugStatus("Speaking...");
+          speakText(replyText, () => {
+            setTimeout(() => { resumeListening(); }, 100);
+          });
+        },
+        funcName: "setLandingStep('mode')"
+      };
+    }
+    if (normalizedText === "teacher") {
+      return {
+        intent: "SELECT_ROLE",
+        entity: "teacher",
+        action: () => {
+          const replyText = "Opening Educator and Teacher Portal.";
+          setAgentState(STATE_SPEAKING);
+          setDebugStatus("Speaking...");
+          speakText(replyText, () => {
+            navigate("/teacher/login");
+          });
+        },
+        funcName: "navigate('/teacher/login')"
+      };
+    }
+    if (normalizedText === "start blind") {
+      return {
+        intent: "START_MODE",
+        entity: "blind",
+        action: () => {
+          selectMode("blind", false);
+          handleDemoLogin("blind");
+        },
+        funcName: "handleDemoLogin('blind')"
+      };
+    }
+    if (normalizedText === "start deaf") {
+      return {
+        intent: "START_MODE",
+        entity: "deaf",
+        action: () => {
+          selectMode("deaf", false);
+          handleDemoLogin("deaf");
+        },
+        funcName: "handleDemoLogin('deaf')"
+      };
+    }
+    if (normalizedText === "start motor") {
+      return {
+        intent: "START_MODE",
+        entity: "motor",
+        action: () => {
+          selectMode("motor", false);
+          handleDemoLogin("motor");
+        },
+        funcName: "handleDemoLogin('motor')"
+      };
+    }
+    if (normalizedText === "start") {
+      return {
+        intent: "START_MODE",
+        entity: selectedRef.current || selected || "blind",
+        action: () => {
+          if (landingStep !== "mode") {
+            setLandingStep("mode");
+            const replyText = "Please choose Blind Mode, Deaf Mode, or Motor Mode.";
+            setAgentState(STATE_SPEAKING);
+            setDebugStatus("Speaking...");
+            speakText(replyText, () => {
+              setTimeout(() => { resumeListening(); }, 100);
+            });
+          } else {
+            handleDemoLogin(selectedRef.current || selected || "blind");
+          }
+        },
+        funcName: "handleDemoLogin()"
+      };
+    }
     if (normalizedText === "english") {
       return {
         intent: "SELECT_LANGUAGE",
@@ -737,7 +850,7 @@ export default function Landing() {
     }
 
     return null;
-  }, [selectBlindMode, selectMotorMode, openLogin, openSignup, speakText, resumeListening, setSelectedWithRef, setAgentState, handleOrbClick, navigate]);
+  }, [selectBlindMode, selectMotorMode, selectDeafMode, openLogin, openSignup, speakText, resumeListening, setSelectedWithRef, setAgentState, handleOrbClick, navigate, setLandingStep, selectMode, handleDemoLogin, landingStep]);
 
 
   // Speech Recognition Context Registration
@@ -1041,7 +1154,10 @@ export default function Landing() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
               {/* Student Card */}
               <div
-                onClick={() => setLandingStep("mode")}
+                onClick={() => {
+                  if (role === "teacher") logout();
+                  setLandingStep("mode");
+                }}
                 className="group relative bg-white border-2 border-slate-200 hover:border-[#0066ff] rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-200 cursor-pointer flex flex-col justify-between"
               >
                 <div>
@@ -1083,6 +1199,7 @@ export default function Landing() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (role === "teacher") logout();
                       setLandingStep("mode");
                     }}
                     className="w-full py-3.5 px-6 rounded-2xl bg-[#0066ff] hover:bg-blue-600 active:scale-98 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
@@ -1310,7 +1427,7 @@ export default function Landing() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      selectMode("blind", true);
+                      handleDemoLogin("blind");
                     }}
                     className="w-full py-3 px-6 rounded-full bg-[#0066ff] hover:bg-blue-600 active:scale-[0.99] text-white font-bold text-sm shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -1354,7 +1471,7 @@ export default function Landing() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      selectMode("deaf", false);
+                      handleDemoLogin("deaf");
                     }}
                     className="w-full py-3 px-6 rounded-full bg-[#dbf7e6] hover:bg-[#c3f0d4] active:scale-[0.99] text-[#059669] font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -1398,7 +1515,7 @@ export default function Landing() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      selectMode("motor", true);
+                      handleDemoLogin("motor");
                     }}
                     className="w-full py-3 px-6 rounded-full bg-[#efe8ff] hover:bg-[#e4d7ff] active:scale-[0.99] text-[#7c3aed] font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -1521,7 +1638,7 @@ export default function Landing() {
           <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-lg max-w-sm flex flex-col gap-2 relative text-slate-800">
             <div className="flex items-start justify-between gap-4">
               <p className="text-xs font-medium text-slate-800 leading-snug">
-                &quot;Hello! I am AccessAI. Please choose your preferred language to begin.&quot;
+                {speechBubble ? `"${speechBubble}"` : `"${textToSpeak}"`}
               </p>
               <button
                 onClick={() => setShowSpeechBubble(false)}

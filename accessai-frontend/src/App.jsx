@@ -54,26 +54,23 @@ function RoutePersistence() {
   return null;
 }
 
-// Protects /deaf /blind /motor — redirects to login if not authenticated or if user is a teacher
+// Protects /deaf /blind /motor — allows seamless switching and access to requested mode
 function ProtectedRoute({ children, requiredMode }) {
-  const { user, role, disabilityType } = useAuth();
+  const { user, role, disabilityType, loginDemoUser } = useAuth();
   
+  const isTeacher = role === "teacher" || user?.role === "teacher" || user?.user_metadata?.role === "teacher";
+  const needsSwitch = isTeacher || !disabilityType || disabilityType !== requiredMode;
+
+  useEffect(() => {
+    if (user && needsSwitch && loginDemoUser) {
+      loginDemoUser(requiredMode);
+    }
+  }, [user, needsSwitch, loginDemoUser, requiredMode]);
+
   if (!user) {
     return <Navigate to={`/${requiredMode}/login`} replace />;
   }
 
-  const isTeacher = role === "teacher" || user?.role === "teacher" || user?.user_metadata?.role === "teacher";
-  if (isTeacher) {
-    return <Navigate to="/teacher" replace />;
-  }
-
-  if (!disabilityType) {
-    return <Navigate to={`/${requiredMode}/login`} replace />;
-  }
-
-  if (disabilityType !== requiredMode) {
-    return <Navigate to={`/${disabilityType}`} replace />;
-  }
   return children;
 }
 

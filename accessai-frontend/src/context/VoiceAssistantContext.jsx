@@ -79,6 +79,7 @@ function isActiveSpeechEcho(heardText, lastSpokenText) {
 
 export function VoiceAssistantProvider({ children }) {
   const auth = useContext(AuthContext);
+  // Teacher check - strictly prevents voice assistant from interfering when user is in teacher mode
   const isTeacher = Boolean(auth?.role === "teacher" || auth?.user?.role === "teacher" || auth?.user?.user_metadata?.role === "teacher");
   const { speechLang } = useLanguage();
   const [context, setContext] = useState("NONE");
@@ -185,6 +186,7 @@ export function VoiceAssistantProvider({ children }) {
   const handleStop = useCallback(() => {
     console.log("[VoiceAssistant] Action: STOP (barge-in / interruption)");
     cancelSpeech();
+    hasPermissionErrorRef.current = false;
     isPausedRef.current = false;
     setAgentState("LISTENING");
     setTranscript("");
@@ -201,6 +203,7 @@ export function VoiceAssistantProvider({ children }) {
 
   const handleResume = useCallback(() => {
     console.log("[VoiceAssistant] Action: RESUME (unpausing assistant)");
+    hasPermissionErrorRef.current = false;
     isPausedRef.current = false;
     setAgentState("LISTENING");
     setListening(true);
@@ -360,6 +363,7 @@ export function VoiceAssistantProvider({ children }) {
   const stop = useCallback(() => {
     cancelSpeech();
     setListening(false);
+    hasPermissionErrorRef.current = false;
     isPausedRef.current = false;
     setAgentState("IDLE");
     try {
@@ -395,7 +399,8 @@ export function VoiceAssistantProvider({ children }) {
       setAgentState("IDLE");
     } else {
       hasPermissionErrorRef.current = false;
-      isPausedRef.current = false;
+      hasPermissionErrorRef.current = false;
+    isPausedRef.current = false;
       safeStartRecognition();
     }
   }, [cancelSpeech, safeStartRecognition]);
