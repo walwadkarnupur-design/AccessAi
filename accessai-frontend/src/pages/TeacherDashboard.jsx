@@ -152,6 +152,7 @@ export default function TeacherDashboard() {
       st.name === "Aarav Patel");
   const [rosterSearch, setRosterSearch] = useState("");
   const [interventionToast, setInterventionToast] = useState(null);
+  const [syncingStudentId, setSyncingStudentId] = useState(null);
   const overviewQuickStudents = [
     ...students.filter(isFlagshipStudent),
     ...students.filter((st) => !isFlagshipStudent(st))
@@ -272,29 +273,38 @@ export default function TeacherDashboard() {
     setRnBroadcastText("");
   };
 
-  const handleSendIntervention = (item) => {
-    if (channelRef.current) {
-      channelRef.current.sendTextMessage(
-        `[Personal Guidance for ${item.studentName}]: ${item.aiRecommendation}`,
-        { senderMode: "teacher", isIntervention: true }
-      );
-    }
-    // Feature 3: Persist pedagogical intervention in Meko so student agents recall it
-    MekoService.writeMemory(
-      "accessai-runtime",
-      `[Teacher Intervention] For ${item.studentName} (${item.mode} mode) on ${item.topic}: ${item.aiRecommendation}`,
-      "teacher_intervention"
-    );
+  const handleSendIntervention = async (item) => {
+    if (!item) return;
+    const sId = item.studentId || item.id;
+    setSyncingStudentId(sId);
+    setInterventionToast(`Syncing guidance for ${item.studentName} to Meko Cloud (Datapack 3bbeb08c)...`);
 
-    // Save to demo intervention history
-    MekoService.sendDemoIntervention(item, item.aiRecommendation).catch(() => {});
-    const entry = recordDemoIntervention(item, item.aiRecommendation);
-    if (entry) {
-      setDemoInterventions((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
-    }
+    try {
+      const res = await MekoService.sendDemoIntervention(item, item.aiRecommendation);
+      if (res && (res.meko_synced || res.success)) {
+        if (channelRef.current) {
+          channelRef.current.sendTextMessage(
+            `[Personal Guidance for ${item.studentName}]: ${item.aiRecommendation}`,
+            { senderMode: "teacher", isIntervention: true }
+          );
+        }
 
-    setInterventionToast(`Intervention sent to ${item.studentName} & synchronized to Meko!`);
-    setTimeout(() => setInterventionToast(null), 4000);
+        const entry = res.entry || recordDemoIntervention(item, item.aiRecommendation);
+        if (entry) {
+          setDemoInterventions((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
+        }
+
+        setInterventionToast(`✓ Confirmed by Meko Cloud: Guidance for ${item.studentName} saved to Datapack 3bbeb08c!`);
+      } else {
+        const errDetail = res?.meko_response?.error || "Meko server returned unconfirmed response";
+        setInterventionToast(`⚠️ Meko Sync Warning: ${errDetail}`);
+      }
+    } catch (err) {
+      setInterventionToast(`❌ Meko Connection Error: ${err.message}`);
+    } finally {
+      setSyncingStudentId(null);
+      setTimeout(() => setInterventionToast(null), 6000);
+    }
   };
 
   const handleResetDemoCohort = async () => {
