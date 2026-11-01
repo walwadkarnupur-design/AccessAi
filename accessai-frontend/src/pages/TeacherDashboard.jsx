@@ -287,6 +287,7 @@ export default function TeacherDashboard() {
     );
 
     // Save to demo intervention history
+    MekoService.sendDemoIntervention(item, item.aiRecommendation).catch(() => {});
     const entry = recordDemoIntervention(item, item.aiRecommendation);
     if (entry) {
       setDemoInterventions((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
