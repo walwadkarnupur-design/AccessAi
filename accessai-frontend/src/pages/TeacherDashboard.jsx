@@ -131,7 +131,7 @@ export default function TeacherDashboard() {
   // Active navigation tab
   const [activeTab, setActiveTab] = useState("overview"); // "overview" | "analytics" | "students" | "progress" | "rn" | "settings"
   const [selectedStudent, setSelectedStudent] = useState(null); // For Profile drawer
-  const [students, setStudents] = useState([]);
+  const [students, setStudents] = useState(() => getActiveDemoCohort());
   const [isLoadingStudents, setIsLoadingStudents] = useState(true);
 
   // Selected student for AccessAI Student Drilldown
