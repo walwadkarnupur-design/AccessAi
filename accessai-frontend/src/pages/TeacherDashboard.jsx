@@ -141,12 +141,28 @@ export default function TeacherDashboard() {
   const [demoInterventions, setDemoInterventions] = useState(() => getDemoInterventionHistory());
   const [demoFilterMode, setDemoFilterMode] = useState("all"); // "all" | "deaf" | "blind" | "motor"
   const [demoSearch, setDemoSearch] = useState("");
-  const [rosterFilterMode, setRosterFilterMode] = useState("all");
+  const [rosterFilterMode, setRosterFilterMode] = useState("all"); // "all" | "flagship" | "deaf" | "blind" | "motor"
+  const isFlagshipStudent = (st) =>
+    st &&
+    (st.id === "demo-deaf-001" ||
+      st.id === "demo-blind-001" ||
+      st.id === "demo-motor-001" ||
+      st.name === "Vrusha Goyal" ||
+      st.name === "Aman Halkude" ||
+      st.name === "Aarav Patel");
   const [rosterSearch, setRosterSearch] = useState("");
   const [interventionToast, setInterventionToast] = useState(null);
+  const overviewQuickStudents = [
+    ...students.filter(isFlagshipStudent),
+    ...students.filter((st) => !isFlagshipStudent(st))
+  ].slice(0, 6);
 
   const filteredRosterStudents = students.filter((s) => {
-    if (rosterFilterMode !== "all" && s.mode !== rosterFilterMode) return false;
+    if (rosterFilterMode === "flagship") {
+      if (!isFlagshipStudent(s)) return false;
+    } else if (rosterFilterMode !== "all" && s.mode !== rosterFilterMode) {
+      return false;
+    }
     if (rosterSearch) {
       const q = rosterSearch.toLowerCase();
       return (
@@ -554,7 +570,7 @@ export default function TeacherDashboard() {
                   </div>
 
                   <div className="divide-y divide-slate-100">
-                    {students.slice(0, 6).map((s) => (
+                    {overviewQuickStudents.map((s) => (
                       <div key={s.id} className="py-3 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-full bg-blue-50 text-[#0866F5] font-bold text-xs flex items-center justify-center shrink-0">
@@ -1293,7 +1309,12 @@ export default function TeacherDashboard() {
                               <div>
                                 <div className="flex items-center gap-1.5">
                                   <span className="font-bold text-slate-900 block leading-tight">{student.name}</span>
-                                  {student.isDemo && (
+                                  {isFlagshipStudent(student) && (
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-200 text-amber-950 border border-amber-400 shadow-2xs">
+                                      ⭐ FLAGSHIP DEMO
+                                    </span>
+                                  )}
+                                  {student.isDemo && !isFlagshipStudent(student) && (
                                     <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">
                                       DEMO
                                     </span>
