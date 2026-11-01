@@ -362,6 +362,77 @@ export const MekoService = {
       console.warn("Meko fetchLiveDecisions fallback to cached:", e.message);
       return BUILD_DATAPACK_DECISIONS;
     }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 90-STUDENT SIMULATED COHORT DATASET METHODS (DEMO DATASET)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Retrieves 90 demo students (30 Deaf, 30 Blind, 30 Motor)
+   */
+  async getDemoStudents(mode = "all", search = "") {
+    try {
+      const res = await API.get(`/api/meko/demo/students?mode=${mode}&search=${encodeURIComponent(search)}`);
+      return res.data?.students || [];
+    } catch (e) {
+      console.warn("Falling back to local simulated cohort:", e.message);
+      const { getActiveDemoCohort } = await import("../data/simulatedCohortData");
+      let list = getActiveDemoCohort();
+      if (mode && mode !== "all") list = list.filter(s => s.mode === mode);
+      if (search) {
+        const q = search.toLowerCase();
+        list = list.filter(s => s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q) || s.learningActivity?.currentTopic?.toLowerCase().includes(q));
+      }
+      return list;
+    }
+  },
+
+  /**
+   * Retrieves aggregated cognitive analytics across the 90 demo students
+   */
+  async getDemoAnalytics() {
+    try {
+      const res = await API.get("/api/meko/demo/analytics");
+      return res.data;
+    } catch (e) {
+      console.warn("Falling back to local cohort analytics:", e.message);
+      const { computeCohortAnalytics } = await import("../data/simulatedCohortData");
+      return computeCohortAnalytics();
+    }
+  },
+
+  /**
+   * Sends teacher intervention for a demo student & syncs to Meko
+   */
+  async sendDemoIntervention(item, customRecommendation = null) {
+    const recommendation = customRecommendation || item.aiRecommendation || "Personalized accommodation guidance applied.";
+    try {
+      const res = await API.post("/api/meko/demo/intervene", {
+        studentId: item.studentId || item.id,
+        studentName: item.studentName || item.name,
+        mode: item.mode,
+        topic: item.topic || item.learningActivity?.currentTopic,
+        recommendation
+      });
+      return res.data;
+    } catch (e) {
+      console.warn("Saving demo intervention locally:", e.message);
+      const { recordDemoIntervention } = await import("../data/simulatedCohortData");
+      return { entry: recordDemoIntervention(item, recommendation) };
+    }
+  },
+
+  /**
+   * Resets simulated demo cohort without deleting actual student records
+   */
+  async resetDemoCohort() {
+    try {
+      await API.post("/api/meko/demo/reset");
+    } catch (e) {}
+    const { resetDemoCohortData } = await import("../data/simulatedCohortData");
+    resetDemoCohortData();
+    return true;
   }
 };
 

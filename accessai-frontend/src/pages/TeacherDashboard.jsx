@@ -6,6 +6,7 @@ import { MeetingChannel } from "../services/meetingChannel";
 import LanguageSelector from "../components/LanguageSelector";
 import MekoContextInspector from "../components/MekoContextInspector";
 import MekoService from "../services/meko";
+import { computeCohortAnalytics, getActiveDemoCohort, resetDemoCohortData, recordDemoIntervention, getDemoInterventionHistory } from "../data/simulatedCohortData";
 
 function SparkleIcon({ className = "w-6 h-6" }) {
   return (
@@ -135,6 +136,11 @@ export default function TeacherDashboard() {
 
   // Selected student for AccessAI Student Drilldown
   const [drilldownStudentKey, setDrilldownStudentKey] = useState("active-student-session");
+  const [demoCohort, setDemoCohort] = useState(() => getActiveDemoCohort());
+  const [demoAnalytics, setDemoAnalytics] = useState(() => computeCohortAnalytics());
+  const [demoInterventions, setDemoInterventions] = useState(() => getDemoInterventionHistory());
+  const [demoFilterMode, setDemoFilterMode] = useState("all"); // "all" | "deaf" | "blind" | "motor"
+  const [demoSearch, setDemoSearch] = useState("");
   const [interventionToast, setInterventionToast] = useState(null);
 
   // ── RN (Realtime Network) State ──
@@ -281,7 +287,25 @@ export default function TeacherDashboard() {
       `[Teacher Intervention] For ${item.studentName} (${item.mode} mode) on ${item.topic}: ${item.aiRecommendation}`,
       "teacher_intervention"
     );
+
+    // Save to demo intervention history
+    const entry = recordDemoIntervention(item, item.aiRecommendation);
+    if (entry) {
+      setDemoInterventions((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
+    }
+
     setInterventionToast(`Intervention sent to ${item.studentName} & synchronized to Meko!`);
+    setTimeout(() => setInterventionToast(null), 4000);
+  };
+
+  const handleResetDemoCohort = async () => {
+    await MekoService.resetDemoCohort();
+    resetDemoCohortData();
+    const fresh = getActiveDemoCohort();
+    setDemoCohort(fresh);
+    setDemoAnalytics(computeCohortAnalytics(fresh));
+    setDemoInterventions(getDemoInterventionHistory());
+    setInterventionToast("90-Student Demo Dataset reset successfully. Real student records remain untouched.");
     setTimeout(() => setInterventionToast(null), 4000);
   };
 
@@ -616,220 +640,533 @@ export default function TeacherDashboard() {
           {/* ══════════════════════════════════════════════════════════════
               TAB: ACCESSAI STUDENT ANALYSIS & DIAGNOSTICS SUITE
               ══════════════════════════════════════════════════════════════ */}
+                    {/* ══════════════════════════════════════════════════════════════
+              TAB: ACCESSAI STUDENT ANALYSIS & DIAGNOSTICS SUITE
+              ══════════════════════════════════════════════════════════════ */}
           {activeTab === "analytics" && (
             <div className="flex flex-col gap-6 animate-fadeIn">
-              {/* Header Info */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              {/* Header Info & Data Separation Notice */}
+              <div className="bg-gradient-to-r from-[#0d1f4d] via-[#10265C] to-[#0d1f4d] text-white p-6 md:p-7 rounded-3xl shadow-sm border border-blue-900/60 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0866F5] border border-blue-200 text-[10px] font-bold uppercase tracking-wider">
-                      AccessAI Cognitive Engine
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="px-3 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 text-[10px] font-black uppercase tracking-wider">
+                      DEMO DATASET • 90 SIMULATED LEARNERS
                     </span>
-                    <span className="text-xs font-bold text-slate-500">• Multi-Modal Telemetry</span>
+                    <span className="text-xs text-blue-200 font-bold">
+                      30 Deaf/Mute • 30 Blind • 30 Motor Impaired
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold">
+                      Meko Persistent Memory Active
+                    </span>
                   </div>
-                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                    Student Cognitive Diagnostics & Friction Analysis
+                  <h2 className="text-xl font-extrabold text-white tracking-tight">
+                    Multi-Modal Student Cognitive Diagnostics & Friction Analysis
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Real-time monitoring of sign recognition accuracy, auditory focus, and automated intervention detection.
+                  <p className="text-xs text-blue-200/80 mt-1 max-w-2xl leading-relaxed">
+                    Simulated cohort evaluating how AccessAI personalizes accommodations, captures accessibility bottlenecks (Zero-PII), and recommends closed-loop educator interventions via Meko.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleResetDemoCohort}
+                    className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    title="Reset simulated activity without affecting genuine student records"
+                  >
+                    <span className="material-symbols-outlined !text-base">restart_alt</span>
+                    <span>Reset Demo Data</span>
+                  </button>
                   <button
                     onClick={() => {
-                      setInterventionToast("Exported PDF Diagnostic Report!");
+                      setInterventionToast("Exported PDF Diagnostic Cohort Report!");
                       setTimeout(() => setInterventionToast(null), 3000);
                     }}
-                    className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-[#0866F5] hover:bg-blue-600 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
                   >
                     <span className="material-symbols-outlined !text-base">download</span>
-                    <span>Export Analysis</span>
+                    <span>Export Report</span>
                   </button>
                 </div>
               </div>
 
-              {/* Modality Telemetry Cards (AccessAI 3-Way Multi-Modal Comparison) */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {ACCESSAI_COHORT_METRICS.modalities.map((mod) => (
-                  <div key={mod.id} className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between gap-4">
+              {/* 1. TOP 4 COHORT METRICS (90 Students Distribution) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Total */}
+                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+                      <span className="uppercase tracking-wider">Total Demo Learners</span>
+                      <span className="material-symbols-outlined text-[#0866F5] !text-xl">groups</span>
+                    </div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight">90</div>
+                    <p className="text-[11px] text-slate-500 mt-1 font-medium">30 Deaf • 30 Blind • 30 Motor</p>
+                  </div>
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] mt-3">
+                    <span className="text-slate-400">Accommodations:</span>
+                    <span className="font-bold text-emerald-600">100% Unique Profiles</span>
+                  </div>
+                </div>
+
+                {/* Deaf */}
+                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+                      <span className="uppercase tracking-wider flex items-center gap-1">🤟 Deaf / Mute</span>
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-black text-[10px] border border-indigo-200">
+                        30 Active
+                      </span>
+                    </div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight">95.4%</div>
+                    <p className="text-[11px] text-slate-500 mt-1 font-medium">Sign Recognition Precision</p>
+                  </div>
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] mt-3">
+                    <span className="text-slate-400">Captions Reliance:</span>
+                    <span className="font-bold text-indigo-600">99.4% (640ms Hold)</span>
+                  </div>
+                </div>
+
+                {/* Blind */}
+                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+                      <span className="uppercase tracking-wider flex items-center gap-1">🎙️ Blind / Low Vision</span>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0866F5] font-black text-[10px] border border-blue-200">
+                        30 Active
+                      </span>
+                    </div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight">92.8%</div>
+                    <p className="text-[11px] text-slate-500 mt-1 font-medium">Voice Command Fluency</p>
+                  </div>
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] mt-3">
+                    <span className="text-slate-400">Auditory Reliance:</span>
+                    <span className="font-bold text-[#0866F5]">100% (0.95x Rate)</span>
+                  </div>
+                </div>
+
+                {/* Motor */}
+                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+                      <span className="uppercase tracking-wider flex items-center gap-1">♿ Motor Impaired</span>
+                      <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-black text-[10px] border border-teal-200">
+                        30 Active
+                      </span>
+                    </div>
+                    <div className="text-3xl font-black text-slate-900 tracking-tight">91.2%</div>
+                    <p className="text-[11px] text-slate-500 mt-1 font-medium">Head/Switch Target Precision</p>
+                  </div>
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] mt-3">
+                    <span className="text-slate-400">Dwell & Padding:</span>
+                    <span className="font-bold text-teal-600">1.4s Dwell (48px)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. CATEGORY-WISE LEARNING DIFFICULTIES & ACCESSIBILITY-SPECIFIC FRICTION */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col gap-5">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[#0866F5] !text-xl">psychology</span>
+                    <span>Category-Wise Learning Difficulties & Accessibility-Specific Friction</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Granular breakdown of cognitive roadblocks experienced by each disability cohort.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {/* Deaf / Mute (30) */}
+                  <div className="p-5 rounded-2xl bg-indigo-50/40 border border-indigo-200/80 flex flex-col justify-between gap-4">
                     <div>
                       <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
-                            <span className="material-symbols-outlined !text-lg">{mod.icon}</span>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-bold text-slate-900">{mod.label}</h4>
-                            <span className="text-[10px] text-slate-400">{mod.count} Active Learners</span>
-                          </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-                          {mod.retentionScore}% Retention
+                        <span className="font-extrabold text-xs text-indigo-950 flex items-center gap-1.5">
+                          <span>🤟</span> Deaf / Mute (30 Students)
+                        </span>
+                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                          Visual Channel
                         </span>
                       </div>
-
-                      <div className="space-y-2.5 text-xs">
-                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
-                          <span className="text-slate-500 text-[11px]">{mod.primaryMetricName}:</span>
-                          <span className="font-extrabold text-[#0866F5]">{mod.primaryMetricVal}</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
-                          <span className="text-slate-500 text-[11px]">Hold / Dwell Pacing:</span>
-                          <span className="font-bold text-slate-800">{mod.avgHoldStabilization}</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
-                          <span className="text-slate-500 text-[11px]">Fatigue Risk Index:</span>
-                          <span className="font-bold text-emerald-600">{mod.visualFatigue}</span>
-                        </div>
+                      <div className="p-2.5 rounded-xl bg-white/90 border border-indigo-200 text-xs mb-3">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Primary Struggle:</span>
+                        <span className="font-bold text-slate-900">{demoAnalytics.difficultiesByCategory.deaf.primaryStruggle}</span>
                       </div>
+                      <ul className="space-y-2 text-xs text-slate-700">
+                        {demoAnalytics.difficultiesByCategory.deaf.commonIssues.map((iss, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-indigo-600 font-bold">•</span>
+                            <span className="leading-tight text-[11px]">{iss}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                      <span className="text-slate-400">Captions Reliance:</span>
-                      <span className="font-bold text-slate-700">{mod.captionRate}</span>
+                    <div className="pt-2 border-t border-indigo-200/60 text-[10px] text-indigo-900 font-medium flex justify-between">
+                      <span>Gesture Hold: {demoAnalytics.difficultiesByCategory.deaf.avgHoldStabilization}</span>
+                      <span>Caption Rate: {demoAnalytics.difficultiesByCategory.deaf.captionReliance}</span>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Real-Time Intervention Queue (Actionable AI Triage) */}
-              <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col gap-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-amber-500 !text-xl">warning</span>
-                    <h3 className="text-base font-bold text-slate-900">
-                      AccessAI Active Friction & Intervention Queue ({ACCESSAI_COHORT_METRICS.interventionQueue.length})
-                    </h3>
-                  </div>
-                  <span className="text-xs text-slate-500">Automated choke-point detection</span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {ACCESSAI_COHORT_METRICS.interventionQueue.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-5 rounded-2xl bg-amber-50/40 border border-amber-200 flex flex-col justify-between gap-3"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-amber-500" />
-                            <span>{item.studentName}</span>
-                            <span className="text-[10px] font-normal text-slate-500">({item.mode} mode)</span>
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                            {item.severity} Friction
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-slate-800">{item.topic}</p>
-                        <p className="text-[11px] text-amber-800 mt-0.5 font-medium">⚠️ {item.struggleTime}</p>
-                        <p className="text-xs text-slate-600 mt-2 bg-white/80 p-2.5 rounded-xl border border-amber-200/60 leading-relaxed">
-                          <strong>AI Diagnosis:</strong> {item.aiRecommendation}
-                        </p>
+                  {/* Blind / Low Vision (30) */}
+                  <div className="p-5 rounded-2xl bg-blue-50/40 border border-blue-200/80 flex flex-col justify-between gap-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="font-extrabold text-xs text-blue-950 flex items-center gap-1.5">
+                          <span>🎙️</span> Blind / Low Vision (30 Students)
+                        </span>
+                        <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                          Auditory Channel
+                        </span>
                       </div>
-
-                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200/60">
-                        <button
-                          onClick={() => handleSendIntervention(item)}
-                          className="px-3.5 py-1.5 rounded-lg bg-[#0866F5] hover:bg-blue-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined !text-sm">send</span>
-                          <span>Send 1-Click Guidance</span>
-                        </button>
+                      <div className="p-2.5 rounded-xl bg-white/90 border border-blue-200 text-xs mb-3">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Primary Struggle:</span>
+                        <span className="font-bold text-slate-900">{demoAnalytics.difficultiesByCategory.blind.primaryStruggle}</span>
                       </div>
+                      <ul className="space-y-2 text-xs text-slate-700">
+                        {demoAnalytics.difficultiesByCategory.blind.commonIssues.map((iss, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-[#0866F5] font-bold">•</span>
+                            <span className="leading-tight text-[11px]">{iss}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                  ))}
+                    <div className="pt-2 border-t border-blue-200/60 text-[10px] text-blue-900 font-medium flex justify-between">
+                      <span>Speech Rate: {demoAnalytics.difficultiesByCategory.blind.avgSpeechRate}</span>
+                      <span>Auditory Reliance: {demoAnalytics.difficultiesByCategory.blind.auditoryReliance}</span>
+                    </div>
+                  </div>
+
+                  {/* Motor Impaired (30) */}
+                  <div className="p-5 rounded-2xl bg-teal-50/40 border border-teal-200/80 flex flex-col justify-between gap-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="font-extrabold text-xs text-teal-950 flex items-center gap-1.5">
+                          <span>♿</span> Motor Impaired (30 Students)
+                        </span>
+                        <span className="text-[10px] font-bold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
+                          Physical / Switch Channel
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/90 border border-teal-200 text-xs mb-3">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Primary Struggle:</span>
+                        <span className="font-bold text-slate-900">{demoAnalytics.difficultiesByCategory.motor.primaryStruggle}</span>
+                      </div>
+                      <ul className="space-y-2 text-xs text-slate-700">
+                        {demoAnalytics.difficultiesByCategory.motor.commonIssues.map((iss, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <span className="text-teal-600 font-bold">•</span>
+                            <span className="leading-tight text-[11px]">{iss}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="pt-2 border-t border-teal-200/60 text-[10px] text-teal-900 font-medium flex justify-between">
+                      <span>Dwell Pacing: {demoAnalytics.difficultiesByCategory.motor.avgDwellTime}</span>
+                      <span>Target Padding: {demoAnalytics.difficultiesByCategory.motor.targetExpansion}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Student Drill-Down Diagnostic Telemetry */}
-              <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col gap-5">
-                <div className="flex justify-between items-center flex-wrap gap-2">
+              {/* 3. RANKED LISTS: MOST FREQUENT ISSUES & DIFFICULT TOPICS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Most Frequently Encountered Accessibility Issues */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">Student Telemetry & Sign Heatmap Drill-Down</h3>
-                    <p className="text-xs text-slate-500">Deep telemetry on hand articulation, voice pace, and blockchain awards.</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500">Inspecting:</span>
-                    <select
-                      value={drilldownStudentKey}
-                      onChange={(e) => setDrilldownStudentKey(e.target.value)}
-                      className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 outline-none"
-                    >
-                      <option value="active-student-session">Vrusha Goyal (Deaf Mode)</option>
-                    </select>
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-amber-500 !text-xl">report_problem</span>
+                        <span>Frequently Encountered Accessibility Issues</span>
+                      </h3>
+                      <span className="text-xs text-slate-400">Ranked across 90</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Issues automatically captured by assistive agent telemetry in Meko.
+                    </p>
+
+                    <div className="space-y-3">
+                      {demoAnalytics.topAccessibilityIssues.map((item, idx) => (
+                        <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-200/60 flex flex-col gap-1.5">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-black flex items-center justify-center">
+                                #{idx + 1}
+                              </span>
+                              <span className="truncate max-w-[280px]">{item.issue}</span>
+                            </span>
+                            <span className="font-extrabold text-[#0866F5] shrink-0">{item.count} Students ({item.percentage}%)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="bg-[#0866F5] h-full rounded-full transition-all"
+                              style={{ width: `${Math.min(item.percentage * 3.5, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* 2-Col Telemetry */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  {/* Left 7 Cols: Gesture Accuracy Matrix */}
-                  <div className="lg:col-span-7 flex flex-col gap-3">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Gesture Recognition Accuracy Heatmap
-                    </h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                      {activeStudentProfile.signAccuracyHeatmap.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded-xl border text-center flex flex-col justify-between gap-1 ${
-                            item.accuracy >= 95
-                              ? "bg-emerald-50/60 border-emerald-200"
-                              : item.accuracy >= 85
-                              ? "bg-blue-50/60 border-blue-200"
-                              : "bg-amber-50/60 border-amber-200"
+                {/* Commonly Difficult Learning Topics */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between gap-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[#0866F5] !text-xl">menu_book</span>
+                        <span>Commonly Difficult Learning Topics</span>
+                      </h3>
+                      <span className="text-xs text-slate-400">Curriculum Heatmap</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Lessons where students experienced high dwell times or quiz retries.
+                    </p>
+
+                    <div className="space-y-3">
+                      {demoAnalytics.topDifficultTopics.map((item, idx) => (
+                        <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-200/60 flex flex-col gap-1.5">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-blue-100 text-[#0866F5] text-[10px] font-black flex items-center justify-center">
+                                #{idx + 1}
+                              </span>
+                              <span className="truncate max-w-[280px]">{item.topic}</span>
+                            </span>
+                            <span className="font-extrabold text-amber-600 shrink-0">{item.count} Struggling ({item.percentage}%)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="bg-amber-500 h-full rounded-full transition-all"
+                              style={{ width: `${Math.min(item.percentage * 3.5, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. TEACHER INTERVENTION QUEUE & INTERVENTION HISTORY */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left 7 Cols: Active Intervention Queue */}
+                <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col gap-4">
+                  <div className="flex justify-between items-center flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-amber-500 !text-xl">notifications_active</span>
+                      <h3 className="text-base font-bold text-slate-900">
+                        Teacher Intervention Queue ({demoAnalytics.interventionQueue.length})
+                      </h3>
+                    </div>
+                    <span className="text-xs text-slate-500">Prioritized by cognitive severity</span>
+                  </div>
+
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
+                    {demoAnalytics.interventionQueue.slice(0, 8).map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-4 rounded-2xl bg-amber-50/40 border border-amber-200 flex flex-col justify-between gap-3 shadow-2xs"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-amber-500" />
+                              <span>{item.studentName}</span>
+                              <span className="text-[10px] font-semibold text-slate-500">({item.categoryLabel})</span>
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+                              {item.severity} Friction
+                            </span>
+                          </div>
+                          <p className="text-xs font-bold text-slate-800">{item.topic}</p>
+                          <p className="text-[11px] text-amber-800 mt-0.5 font-medium">⚠️ {item.issue} ({item.struggleTime})</p>
+                          <p className="text-xs text-slate-600 mt-2 bg-white/90 p-2.5 rounded-xl border border-amber-200/60 leading-relaxed">
+                            <strong>AI Diagnosis:</strong> {item.aiRecommendation}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200/60">
+                          <button
+                            onClick={() => handleSendIntervention(item)}
+                            className="px-3.5 py-1.5 rounded-lg bg-[#0866F5] hover:bg-blue-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined !text-sm">send</span>
+                            <span>Send 1-Click Guidance</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right 5 Cols: Intervention History */}
+                <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between gap-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-emerald-600 !text-xl">history_edu</span>
+                        <span>Intervention History</span>
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                        {demoInterventions.length} Executed
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Closed-loop educator guidance synchronized to Meko memory.
+                    </p>
+
+                    <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1 custom-scrollbar">
+                      {demoInterventions.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-xs">
+                          No interventions sent yet. Use the 1-Click Guidance buttons to assist students.
+                        </div>
+                      ) : (
+                        demoInterventions.map((hist) => (
+                          <div key={hist.id} className="p-3 rounded-2xl bg-emerald-50/40 border border-emerald-200 flex flex-col gap-1.5 text-xs">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-slate-900">{hist.studentName}</span>
+                              <span className="text-[10px] text-slate-400">{hist.timestamp}</span>
+                            </div>
+                            <span className="text-[11px] font-semibold text-[#0866F5]">{hist.topic}</span>
+                            <p className="text-slate-600 text-[11px] leading-relaxed bg-white/80 p-2 rounded-lg border border-emerald-100">
+                              {hist.recommendation}
+                            </p>
+                            <div className="flex justify-end">
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded border border-emerald-300">
+                                Synced to Meko Cloud ✓
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. INTERACTIVE 90-STUDENT DIRECTORY (DEMO DATASET) */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col gap-4">
+                <div className="flex justify-between items-center flex-wrap gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-slate-900">
+                        90-Student Simulated Roster Directory
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0866F5] border border-blue-200 text-[10px] font-bold uppercase">
+                        DEMO DATA
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Select any student to inspect individual accommodations, learning history, and friction traces.
+                    </p>
+                  </div>
+
+                  {/* Filters & Search */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+                      {[
+                        { id: "all", label: "All (90)" },
+                        { id: "deaf", label: "Deaf (30)" },
+                        { id: "blind", label: "Blind (30)" },
+                        { id: "motor", label: "Motor (30)" }
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setDemoFilterMode(tab.id)}
+                          className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                            demoFilterMode === tab.id ? "bg-white text-[#0866F5] shadow-xs" : "hover:text-slate-900"
                           }`}
                         >
-                          <span className="text-[10px] text-slate-600 font-bold truncate">{item.sign}</span>
-                          <span className="text-base font-black text-slate-900">{item.accuracy}%</span>
-                          <span
-                            className={`text-[9px] font-bold uppercase tracking-wider ${
-                              item.accuracy >= 95 ? "text-emerald-700" : item.accuracy >= 85 ? "text-blue-700" : "text-amber-700"
-                            }`}
-                          >
-                            {item.status}
-                          </span>
-                        </div>
+                          {tab.label}
+                        </button>
                       ))}
                     </div>
 
-                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 text-xs text-slate-600 mt-1 leading-relaxed">
-                      <strong>AI Educator Insight:</strong> {activeStudentProfile.aiNotes}
-                    </div>
+                    <input
+                      type="text"
+                      value={demoSearch}
+                      onChange={(e) => setDemoSearch(e.target.value)}
+                      placeholder="Search student or topic..."
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 outline-none w-48"
+                    />
                   </div>
+                </div>
 
-                  {/* Right 5 Cols: Accommodation & Credentials */}
-                  <div className="lg:col-span-5 flex flex-col justify-between gap-3">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Learner Accommodations & Blockchain Proof
-                    </h4>
-
-                    <div className="space-y-2 text-xs">
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex justify-between">
-                        <span className="text-slate-500">Preferred Captions:</span>
-                        <span className="font-bold text-slate-800">{activeStudentProfile.accommodations.captions}</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex justify-between">
-                        <span className="text-slate-500">Pacing / Voice Rate:</span>
-                        <span className="font-bold text-slate-800">{activeStudentProfile.accommodations.speed}</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex justify-between">
-                        <span className="text-slate-500">Active Input Pipeline:</span>
-                        <span className="font-bold text-slate-800">{activeStudentProfile.accommodations.input}</span>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-1.5">
-                      <span className="text-[11px] font-bold text-slate-700">Anchored MST Blockchain Credentials:</span>
-                      {activeStudentProfile.blockchainCerts.map((c, i) => (
-                        <div key={i} className="p-2 rounded-lg bg-sky-50 border border-sky-100 flex justify-between items-center text-[10px]">
-                          <span className="font-bold text-sky-900">{c.name}</span>
-                          <span className="font-mono text-slate-500">{c.hash}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {/* Table */}
+                <div className="overflow-x-auto max-h-[460px] overflow-y-auto custom-scrollbar border border-slate-200/60 rounded-2xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50/90 text-slate-500 uppercase text-[10px] font-black tracking-wider border-b border-slate-200 sticky top-0 z-10 backdrop-blur-xs">
+                      <tr>
+                        <th className="py-3 px-4">Demo Student</th>
+                        <th className="py-3 px-3">Mode</th>
+                        <th className="py-3 px-3">Language</th>
+                        <th className="py-3 px-3">Current Topic</th>
+                        <th className="py-3 px-3">Progress</th>
+                        <th className="py-3 px-3">Friction & Struggle</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {demoCohort
+                        .filter((s) => (demoFilterMode === "all" ? true : s.mode === demoFilterMode))
+                        .filter((s) =>
+                          demoSearch
+                            ? s.name.toLowerCase().includes(demoSearch.toLowerCase()) ||
+                              s.email.toLowerCase().includes(demoSearch.toLowerCase()) ||
+                              s.learningActivity?.currentTopic?.toLowerCase().includes(demoSearch.toLowerCase())
+                            : true
+                        )
+                        .map((student) => (
+                          <tr key={student.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-full bg-blue-100 text-[#0866F5] font-black text-xs flex items-center justify-center shrink-0">
+                                  {student.name.charAt(0)}
+                                </div>
+                                <div>
+                                  <span className="font-bold text-slate-900 block leading-tight">{student.name}</span>
+                                  <span className="text-[10px] text-slate-400">{student.id}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              {student.mode === "deaf" ? (
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold inline-flex items-center gap-1">
+                                  <span>🤟</span> Deaf
+                                </span>
+                              ) : student.mode === "blind" ? (
+                                <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0866F5] border border-blue-200 text-[10px] font-bold inline-flex items-center gap-1">
+                                  <span>🎙️</span> Blind
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-bold inline-flex items-center gap-1">
+                                  <span>♿</span> Motor
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 font-medium text-slate-600">{student.language}</td>
+                            <td className="py-3 px-3 font-semibold text-slate-900 truncate max-w-[180px]">
+                              {student.learningActivity?.currentTopic}
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="font-extrabold text-[#0866F5]">{student.progress}%</span>
+                            </td>
+                            <td className="py-3 px-3 truncate max-w-[200px]">
+                              <span className="text-amber-800 font-medium text-[11px]">
+                                {student.learningActivity?.accessibilityFriction?.issueName}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => setSelectedStudent(student)}
+                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-[#0866F5] hover:text-white text-slate-700 text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
+                              >
+                                View Profile
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -847,16 +1184,25 @@ export default function TeacherDashboard() {
                     Inspect student profiles, accommodation settings, and individual learning progress.
                   </p>
                 </div>
-                <button
-                  onClick={fetchStudents}
-                  disabled={isLoadingStudents}
-                  className="px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
-                >
-                  <span className={`material-symbols-outlined !text-sm ${isLoadingStudents ? "animate-spin" : ""}`}>
-                    refresh
-                  </span>
-                  <span>Refresh List</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setActiveTab("analytics")}
+                    className="px-3.5 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-xs font-bold text-amber-900 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <span>📊</span>
+                    <span>View 90 Simulated Demo Cohort</span>
+                  </button>
+                  <button
+                    onClick={fetchStudents}
+                    disabled={isLoadingStudents}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+                  >
+                    <span className={`material-symbols-outlined !text-sm ${isLoadingStudents ? "animate-spin" : ""}`}>
+                      refresh
+                    </span>
+                    <span>Refresh List</span>
+                  </button>
+                </div>
               </div>
 
               {/* Student Table */}
@@ -1206,7 +1552,7 @@ export default function TeacherDashboard() {
       {/* ── Student Profile Drawer ── */}
       {selectedStudent && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 md:p-8 animate-fadeIn relative">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 md:p-8 animate-fadeIn relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedStudent(null)}
               className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer transition-colors"
@@ -1214,42 +1560,112 @@ export default function TeacherDashboard() {
               ✕
             </button>
 
-            <div className="flex items-center gap-3.5 mb-6">
+            <div className="flex items-center gap-3.5 mb-5">
               <div className="w-14 h-14 rounded-2xl bg-blue-100 text-[#0866F5] font-extrabold text-xl flex items-center justify-center shrink-0">
                 {selectedStudent.name.charAt(0).toUpperCase()}
               </div>
               <div>
-                <h3 className="text-xl font-extrabold text-slate-900">{selectedStudent.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-extrabold text-slate-900">{selectedStudent.name}</h3>
+                  {selectedStudent.isDemo && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black uppercase">
+                      DEMO DATA
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-500">{selectedStudent.email}</p>
-                <span className="mt-1 inline-block px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0866F5] border border-blue-200 text-[10px] font-bold uppercase tracking-wider">
-                  Mode: {selectedStudent.mode}
-                </span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0866F5] border border-blue-200 text-[10px] font-bold uppercase tracking-wider">
+                    Mode: {selectedStudent.mode}
+                  </span>
+                  {selectedStudent.language && (
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                      🌐 {selectedStudent.language}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
+            {/* Individual Accommodations */}
+            {selectedStudent.accommodations && (
+              <div className="mb-4">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Individual Accommodation Settings
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {Object.entries(selectedStudent.accommodations).map(([k, v]) => (
+                    <div key={k} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex flex-col">
+                      <span className="text-[10px] text-slate-400 capitalize">{k.replace(/([A-Z])/g, ' $1')}:</span>
+                      <span className="font-bold text-slate-800 text-[11px] mt-0.5">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Learning History & Friction */}
+            {selectedStudent.learningActivity && (
+              <div className="mb-4 space-y-2.5">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Learning Activity & Accessibility Friction Trace
+                </h4>
+                <div className="p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200 text-xs space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-900">{selectedStudent.learningActivity.currentCourse}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+                      {selectedStudent.learningActivity.accessibilityFriction?.severity} Friction
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    <strong>Difficult Lesson:</strong> {selectedStudent.learningActivity.difficultLesson}
+                  </p>
+                  <p className="text-[11px] text-amber-900 font-medium">
+                    ⚠️ <strong>Friction Issue:</strong> {selectedStudent.learningActivity.accessibilityFriction?.issueName} - {selectedStudent.learningActivity.accessibilityFriction?.details}
+                  </p>
+                  <p className="text-[11px] text-slate-600">
+                    <strong>Repeated Help Requests:</strong> {selectedStudent.learningActivity.repeatedHelpRequestsCount} times ("{selectedStudent.learningActivity.lastHelpRequest}")
+                  </p>
+                  <div className="p-2.5 bg-white rounded-xl border border-amber-200 text-[11px] text-slate-700">
+                    <strong>AI Recommended Intervention:</strong> {selectedStudent.learningActivity.aiRecommendation}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* General progress info */}
+            <div className="space-y-2.5 text-xs mb-4">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
                 <span className="text-slate-500 font-semibold">Active Course Progress:</span>
                 <span className="text-sm font-extrabold text-[#0866F5]">{selectedStudent.progress}%</span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
                 <span className="text-slate-500 font-semibold">Assessment Score:</span>
                 <span className="text-sm font-extrabold text-emerald-600">{selectedStudent.assessmentScore}</span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
-                <span className="text-slate-500 font-semibold">Blockchain Credential:</span>
-                <span className="font-semibold text-slate-800">MST Anchored ✓</span>
-              </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex justify-between items-center">
-                <span className="text-slate-500 font-semibold">Last Activity:</span>
-                <span className="font-semibold text-slate-700">{selectedStudent.lastActive}</span>
-              </div>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+              {selectedStudent.learningActivity && (
+                <button
+                  onClick={() => {
+                    handleSendIntervention({
+                      studentName: selectedStudent.name,
+                      studentId: selectedStudent.id,
+                      mode: selectedStudent.mode,
+                      topic: selectedStudent.learningActivity.currentTopic,
+                      aiRecommendation: selectedStudent.learningActivity.aiRecommendation
+                    });
+                  }}
+                  className="px-4 py-2 rounded-xl bg-[#0866F5] hover:bg-blue-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined !text-sm">send</span>
+                  <span>Send 1-Click Guidance</span>
+                </button>
+              )}
               <button
                 onClick={() => setSelectedStudent(null)}
-                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 cursor-pointer transition-colors"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 cursor-pointer transition-colors"
               >
                 Close Profile
               </button>
