@@ -9,6 +9,13 @@ import API from "./api";
 
 const MEKO_STORAGE_KEY_PREFIX = "accessai_meko_datapack_";
 
+// API Configuration — read from environment (.env), never hardcode secrets here.
+export const MEKO_CONFIG = {
+  API_BASE_URL: process.env.REACT_APP_MEKO_API_BASE_URL || "https://mcp.mekodata.ai/mcp",
+  API_KEY: process.env.REACT_APP_MEKO_API_KEY || "",
+  USE_MOCK: process.env.REACT_APP_MEKO_USE_MOCK === "true",
+};
+
 // Default seeded memory for demo / offline fallback
 const DEFAULT_STUDENT_MEMORIES = [
   {
