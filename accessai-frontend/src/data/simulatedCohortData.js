@@ -14,8 +14,8 @@
 export const DEMO_COHORT_STUDENTS = [
   {
     "id": "demo-deaf-001",
-    "name": "Fatima Bose",
-    "email": "fatima.bose.demo@accessai.edu",
+    "name": "Vrusha Goyal",
+    "email": "goyalvrusha@gmail.com",
     "mode": "deaf",
     "categoryLabel": "Deaf & Hard of Hearing",
     "isDemo": true,
@@ -1604,8 +1604,8 @@ export const DEMO_COHORT_STUDENTS = [
   },
   {
     "id": "demo-blind-001",
-    "name": "Fatima Tanaka",
-    "email": "fatima.tanaka.demo@accessai.edu",
+    "name": "Aman Halkude",
+    "email": "amanhalkude7750+blind@gmail.com",
     "mode": "blind",
     "categoryLabel": "Blind & Low Vision",
     "isDemo": true,
@@ -3194,8 +3194,8 @@ export const DEMO_COHORT_STUDENTS = [
   },
   {
     "id": "demo-motor-001",
-    "name": "Fatima Bhat",
-    "email": "fatima.bhat.demo@accessai.edu",
+    "name": "Aarav Patel",
+    "email": "amanhalkude7750@gmail.com",
     "mode": "motor",
     "categoryLabel": "Motor Impaired",
     "isDemo": true,

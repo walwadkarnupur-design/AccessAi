@@ -23,7 +23,7 @@ function SparkleIcon({ className = "w-6 h-6" }) {
 
 export default function TeacherLogin() {
   const navigate = useNavigate();
-  const { signInTeacher, loginTeacherDemoUser, loading } = useAuth();
+  const { signInTeacher, loginTeacherDemoUser, loginDemoUser, loading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -205,6 +205,74 @@ export default function TeacherLogin() {
                 →
               </span>
             </button>
+
+            {/* Student 1-Click Demo Logins */}
+            <div className="mt-5 pt-5 border-t border-slate-100 space-y-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                Student 1-Click Demo Logins:
+              </span>
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    loginDemoUser("deaf", "goyalvrusha@gmail.com", "Vrusha Goyal");
+                    navigate("/deaf");
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 border border-indigo-200/80 text-left flex items-center justify-between text-xs transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-base shrink-0">🤟</span>
+                    <div className="min-w-0">
+                      <span className="font-bold text-indigo-900 block leading-tight">Vrusha Goyal</span>
+                      <span className="text-[10px] text-indigo-600 font-medium">Deaf / Sign Language Mode</span>
+                    </div>
+                  </div>
+                  <span className="text-indigo-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">
+                    Enter →
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    loginDemoUser("blind", "amanhalkude7750+blind@gmail.com", "Aman Halkude");
+                    navigate("/blind");
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-blue-50/70 hover:bg-blue-100/80 border border-blue-200/80 text-left flex items-center justify-between text-xs transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-base shrink-0">🎙️</span>
+                    <div className="min-w-0">
+                      <span className="font-bold text-blue-900 block leading-tight">Aman Halkude</span>
+                      <span className="text-[10px] text-[#0866F5] font-medium">Blind / Voice Guided Mode</span>
+                    </div>
+                  </div>
+                  <span className="text-[#0866F5] font-bold text-xs group-hover:translate-x-0.5 transition-transform">
+                    Enter →
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    loginDemoUser("motor", "amanhalkude7750@gmail.com", "Aarav Patel");
+                    navigate("/motor");
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-teal-50/70 hover:bg-teal-100/80 border border-teal-200/80 text-left flex items-center justify-between text-xs transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-base shrink-0">🎯</span>
+                    <div className="min-w-0">
+                      <span className="font-bold text-teal-900 block leading-tight">Aarav Patel</span>
+                      <span className="text-[10px] text-teal-700 font-medium">Motor / Hands-Free Mode</span>
+                    </div>
+                  </div>
+                  <span className="text-teal-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">
+                    Enter →
+                  </span>
+                </button>
+              </div>
+            </div>
 
             {/* Return to student role link */}
             <div className="text-center mt-6 pt-5 border-t border-slate-100">
