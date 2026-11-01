@@ -1,13 +1,15 @@
 /**
  * AccessAI Meko Context Client
  * Shared context layer integration for Track A (Open Project - hackCBS 9.0).
- * Implements: Datapacks as scopes, memory extraction, recall before reasoning,
+ * Implements: Datapacks as scopes, persistent memory across sessions,
+ * multi-student telemetry/friction logging, recall before reasoning,
  * and promotion to shared knowledge.
  */
+import API from "./api";
 
 const MEKO_STORAGE_KEY_PREFIX = "accessai_meko_datapack_";
 
-// Default seeded memory for demo purposes
+// Default seeded memory for demo / offline fallback
 const DEFAULT_STUDENT_MEMORIES = [
   {
     id: "mem-1",
@@ -131,7 +133,7 @@ export const BUILD_DATAPACK_DECISIONS = [
 
 export const MekoService = {
   /**
-   * Retrieves memories from a scoped datapack
+   * Retrieves memories from a scoped datapack (synchronous, localStorage-cached)
    */
   getDatapack(datapackId = "student-voice-memory") {
     if (typeof window === "undefined") return [];
@@ -174,6 +176,10 @@ export const MekoService = {
     };
     memories.unshift(newEntry);
     localStorage.setItem(`${MEKO_STORAGE_KEY_PREFIX}${datapackId}`, JSON.stringify(memories));
+
+    // Also async sync to live Meko backend in background
+    this.addLiveMemory(text, datapackId).catch(() => {});
+
     return newEntry;
   },
 
@@ -184,7 +190,10 @@ export const MekoService = {
     const memories = this.getDatapack(datapackId);
     if (!topic) return memories;
     const lower = topic.toLowerCase();
-    return memories.filter(m => (m.text || m.decision || "").toLowerCase().includes(lower) || (m.category || m.title || "").toLowerCase().includes(lower));
+    return memories.filter(m => 
+      (m.text || m.decision || "").toLowerCase().includes(lower) || 
+      (m.category || m.title || "").toLowerCase().includes(lower)
+    );
   },
 
   /**
@@ -199,14 +208,19 @@ export const MekoService = {
     localStorage.setItem(`${MEKO_STORAGE_KEY_PREFIX}${sourceDatapack}`, JSON.stringify(sourceMemories));
 
     const sharedKnowledge = this.getDatapack(sharedDatapack);
+    const promotedText = target.text || target.decision;
     sharedKnowledge.unshift({
       id: `kb-${Date.now().toString(36)}`,
-      text: target.text || target.decision,
+      text: promotedText,
       category: target.category || target.title,
       contributor: target.teammate || "Anonymous Learner",
       promotedAt: new Date().toISOString()
     });
     localStorage.setItem(`${MEKO_STORAGE_KEY_PREFIX}${sharedDatapack}`, JSON.stringify(sharedKnowledge));
+
+    // Also async sync to live Meko backend
+    this.addLiveMemory(`[Promoted Shared Knowledge] ${promotedText}`, sharedDatapack).catch(() => {});
+
     return true;
   },
 
@@ -219,6 +233,128 @@ export const MekoService = {
     const filtered = memories.filter(m => m.id !== memoryId);
     localStorage.setItem(`${MEKO_STORAGE_KEY_PREFIX}${datapackId}`, JSON.stringify(filtered));
     return true;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ASYNC LIVE MEKO MCP METHODS (Connected to Flask Backend Proxy)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Check connection status to live Meko MCP server
+   */
+  async checkMekoStatus() {
+    try {
+      const res = await API.get("/api/meko/status");
+      return res.data;
+    } catch (e) {
+      return { status: "offline", error: e.message };
+    }
+  },
+
+  /**
+   * Feature 1: Persistent Memory Across Sessions
+   * Saves student communication & accommodation preferences into Meko
+   */
+  async savePreference(userId, studentName, disabilityType, preferences) {
+    try {
+      const res = await API.post("/api/meko/preferences", {
+        userId,
+        studentName,
+        disabilityType,
+        preferences
+      });
+      return res.data;
+    } catch (e) {
+      console.warn("Meko savePreference fallback to local:", e.message);
+      return { status: "local_only" };
+    }
+  },
+
+  /**
+   * Feature 1: Persistent Memory Across Sessions
+   * Recalls student preferences across sessions
+   */
+  async recallPreferences(studentNameOrId = "") {
+    try {
+      const res = await API.get(`/api/meko/preferences?query=${encodeURIComponent(studentNameOrId || "Student accommodation")}`);
+      return res.data?.results || [];
+    } catch (e) {
+      console.warn("Meko recallPreferences fallback:", e.message);
+      return [];
+    }
+  },
+
+  /**
+   * Feature 2: Multi-Student Telemetry & Friction Logger
+   * Logs an episodic learning struggle into Meko
+   */
+  async logFriction(modality, topic, frictionType, observation, studentHash = "anon-learner") {
+    try {
+      const res = await API.post("/api/meko/friction", {
+        modality,
+        topic,
+        frictionType,
+        observation,
+        studentHash
+      });
+      return res.data;
+    } catch (e) {
+      console.warn("Meko logFriction fallback:", e.message);
+      return { status: "local_only" };
+    }
+  },
+
+  /**
+   * Feature 2 / Feature 3: Teacher Mode Cohort Friction Retrieval
+   * Retrieves active multi-agent friction points for Teacher Dashboard
+   */
+  async fetchCohortFriction() {
+    try {
+      const res = await API.get("/api/meko/friction");
+      return res.data?.results || [];
+    } catch (e) {
+      console.warn("Meko fetchCohortFriction fallback:", e.message);
+      return [];
+    }
+  },
+
+  /**
+   * Live search in any Meko datapack
+   */
+  async searchLiveMemory(query, datapackId = null, limit = 10) {
+    try {
+      const res = await API.post("/api/meko/search", { query, datapack_id: datapackId, limit });
+      return res.data?.results || [];
+    } catch (e) {
+      console.warn("Meko searchLiveMemory fallback:", e.message);
+      return [];
+    }
+  },
+
+  /**
+   * Live add memory to any Meko datapack
+   */
+  async addLiveMemory(text, datapackId = null, agentId = "access-ai-client") {
+    try {
+      const res = await API.post("/api/meko/add", { text, datapack_id: datapackId, agent_id: agentId });
+      return res.data;
+    } catch (e) {
+      console.warn("Meko addLiveMemory fallback:", e.message);
+      return { status: "local_only" };
+    }
+  },
+
+  /**
+   * Feature 3: Live Decisons Recall for Check T
+   */
+  async fetchLiveDecisions() {
+    try {
+      const res = await API.get("/api/meko/decisions");
+      return res.data?.results || [];
+    } catch (e) {
+      console.warn("Meko fetchLiveDecisions fallback to cached:", e.message);
+      return BUILD_DATAPACK_DECISIONS;
+    }
   }
 };
 

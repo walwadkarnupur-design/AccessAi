@@ -6,6 +6,8 @@ import { MeetingChannel } from "../services/meetingChannel";
 import { WebRtcManager } from "../services/webrtcManager";
 import { speechService } from "../services/speechSynthesisService";
 import API from "../services/api";
+import MekoContextInspector from "../components/MekoContextInspector";
+import MekoService from "../services/meko";
 
 // ── Mandatory Quick Response Phrases (Developer 1 Specification) ──
 const QUICK_RESPONSES = [
@@ -567,6 +569,17 @@ export default function DeafMeetingRoom() {
     if (!isSpeechMuted) {
       speechService.speak(finalContent);
     }
+
+    // Feature 2: Log meeting dialogue & friction into Meko persistent memory
+    if (finalContent === "I need help" || finalContent === "Please repeat") {
+      MekoService.logFriction(
+        "deaf_mute",
+        "Live Meeting",
+        "clarification_request",
+        `Student requested live clarification in meeting: "${finalContent}"`
+      );
+    }
+    MekoService.writeMemory("accessai-runtime", `[Meeting Exchange - Deaf Mode]: ${finalContent}`, "meeting_dialogue");
 
     // 3. Clear message composer
     setMessageText("");
@@ -1467,6 +1480,13 @@ export default function DeafMeetingRoom() {
           </div>
         </div>
       </div>
+
+      {/* ── Meko Context Inspector ── */}
+      <MekoContextInspector 
+        studentDatapackId="student-deaf-memory" 
+        sharedDatapackId="course-python-shared" 
+        buildDatapackId="accessai-build" 
+      />
     </div>
   );
 }

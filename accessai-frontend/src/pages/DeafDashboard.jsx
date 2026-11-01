@@ -15,6 +15,8 @@ import CareerLearningPaths from "../components/CareerLearningPaths";
 import DegreeGraduationOffer from "../components/DegreeGraduationOffer";
 import RewardStoreModal from "../components/RewardStoreModal";
 import BackButton from "../components/BackButton";
+import MekoContextInspector from "../components/MekoContextInspector";
+import MekoService from "../services/meko";
 
 
 // High-quality courses database with guaranteed embeddable YouTube links
@@ -2195,6 +2197,13 @@ export default function DeafDashboard() {
         onClose={() => setEarnedCertData(null)}
         certificateData={earnedCertData}
         mode="deaf"
+      />
+
+      {/* ── Meko Context Inspector ── */}
+      <MekoContextInspector 
+        studentDatapackId="student-deaf-memory" 
+        sharedDatapackId="course-python-shared" 
+        buildDatapackId="accessai-build" 
       />
     </div>
   );
