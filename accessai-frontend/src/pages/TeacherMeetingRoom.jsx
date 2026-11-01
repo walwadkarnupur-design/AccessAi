@@ -803,7 +803,7 @@ export default function TeacherMeetingRoom() {
                   </span>
                 ) : (
                   <span className="text-slate-500 italic">
-                    Start speaking into your microphone to generate live captions and drive the synchronized sign language avatar for students...
+                    Start speaking into your microphone to generate live real-time captions for students...
                   </span>
                 )}
               </div>
@@ -853,7 +853,7 @@ export default function TeacherMeetingRoom() {
                   type="text"
                   value={manualCaptionText}
                   onChange={(e) => setManualCaptionText(e.target.value)}
-                  placeholder="Type speech or lecture words to broadcast as live captions & drive 3D sign avatar..."
+                  placeholder="Type speech or lecture words to broadcast as live captions to students..."
                   className="flex-1 bg-slate-900/80 border border-slate-700/70 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-all"
                 />
                 <button

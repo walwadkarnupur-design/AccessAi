@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { SignAvatar } from "../components/DeafMuteMode";
 import { SignLanguageMeetingEngine, MEETING_SIGN_VOCABULARY } from "../services/signLanguageMeetingEngine";
 import { MeetingChannel } from "../services/meetingChannel";
 import { WebRtcManager } from "../services/webrtcManager";
@@ -19,21 +18,6 @@ const QUICK_RESPONSES = [
   { id: "qr-help", text: "I need help", icon: "sos", color: "hover:bg-red-500/20 text-red-400 border-red-500/30" },
   { id: "qr-thanks", text: "Thank you", icon: "volunteer_activism", color: "hover:bg-teal-500/20 text-teal-400 border-teal-500/30" }
 ];
-
-// Helper: Maps incoming speech/text keywords to 3D Sign Avatar gestures
-function detectSignFromText(text) {
-  if (!text) return "sign_asl";
-  const lower = text.toLowerCase();
-  if (lower.includes("hello") || lower.includes("hi") || lower.includes("welcome") || lower.includes("greetings") || lower.includes("palm")) return "wave";
-  if (lower.includes("agree") || lower.includes("yes") || lower.includes("good") || lower.includes("correct") || lower.includes("great") || lower.includes("understood")) return "thumbs_up";
-  if (lower.includes("disagree") || lower.includes("no") || lower.includes("wrong") || lower.includes("fist")) return "no";
-  if (lower.includes("question") || lower.includes("ask") || lower.includes("why") || lower.includes("point") || lower.includes("next")) return "pointing_up";
-  if (lower.includes("thank") || lower.includes("thanks") || lower.includes("courtesy")) return "thank_you";
-  if (lower.includes("help") || lower.includes("assist") || lower.includes("support") || lower.includes("repeat")) return "help";
-  if (lower.includes("love") || lower.includes("ily")) return "iloveyou";
-  if (lower.includes("peace") || lower.includes("two") || lower.includes("victory")) return "victory";
-  return "sign_asl";
-}
 
 export default function DeafMeetingRoom() {
   const navigate = useNavigate();
@@ -59,27 +43,25 @@ export default function DeafMeetingRoom() {
   const [isConnected, setIsConnected] = useState(true);
   const [participants, setParticipants] = useState([]);
 
-  // ── Remote Teacher Video Stream & WebRTC (Section 5 & Teacher Video) ──
+  // ── Remote Teacher Video Stream & WebRTC (Two-Way Video Calling) ──
   const [remoteStream, setRemoteStream] = useState(null);
   const [remoteVideoActive, setRemoteVideoActive] = useState(false);
   const [isTeacherAudioMuted, setIsTeacherAudioMuted] = useState(true);
-  const [videoLayoutMode, setVideoLayoutMode] = useState("split"); // 'split' | 'avatar_focus' | 'video_focus'
+  const [videoLayoutMode, setVideoLayoutMode] = useState("split"); // 'split' | 'teacher_focus' | 'student_focus'
   const remoteVideoRef = useRef(null);
   const webrtcRef = useRef(null);
 
-  // ── Incoming Live Captions & 3D Sign Avatar (Section 5) ──
+  // ── Incoming Live Captions (Section 5) ──
   const [liveCaption, setLiveCaption] = useState({
     speaker: "AccessAI Relay Bot",
-    text: "Welcome to the accessible meeting. Captions and 3D sign avatar are active.",
+    text: "Welcome to the inclusive meeting. Captions and two-way video calling are active.",
     active: false,
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   });
-  const [avatarAction, setAvatarAction] = useState("idle"); // 'idle' | 'sign_asl' | 'wave' | 'thumbs_up'
-  const [avatarSpeaking, setAvatarSpeaking] = useState(false);
 
-  // ── Optional Camera & Sign Language Detection (Section 2) ──
-  // Camera is OFF by default. Microphone is NEVER requested.
-  const [cameraActive, setCameraActive] = useState(false);
+  // ── Voluntary Student Camera & Sign Language Detection (Section 2) ──
+  // Camera active by default for mutual face-to-face video calling. Microphone is NEVER requested.
+  const [cameraActive, setCameraActive] = useState(true);
   const [cameraError, setCameraError] = useState(null);
   const [detectedSign, setDetectedSign] = useState(null);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -211,24 +193,13 @@ export default function DeafMeetingRoom() {
         incomingMsg.messageType === "sign_to_text" ||
         incomingMsg.isTeacherAnnouncement
       ) {
-        // 1. Update Live Speech-to-Text Captions
+        // Update Live Speech-to-Text Captions
         setLiveCaption({
           speaker: incomingMsg.senderName || (incomingMsg.senderMode === "teacher" ? "Instructor" : "Hearing Participant"),
           text: incomingMsg.text,
           active: true,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
-
-        // 2. Animate 3D Sign Language Avatar with Synchronized Gesture
-        const matchedSign = detectSignFromText(incomingMsg.text);
-        setAvatarAction(matchedSign);
-        setAvatarSpeaking(true);
-
-        // Reset avatar to idle after sign playback
-        setTimeout(() => {
-          setAvatarAction("idle");
-          setAvatarSpeaking(false);
-        }, 4500);
       }
     });
 
@@ -304,10 +275,36 @@ export default function DeafMeetingRoom() {
           }
         }
       })
-      .catch((err) => {
-        console.warn("Engine initialization error:", err);
-        setCameraError("Gesture engine unavailable. You can continue participating 100% via text!");
-        setCameraActive(false);
+      .catch(async (err) => {
+        console.warn("[StudentRoom] MediaPipe engine init error, falling back to direct webcam:", err);
+        // Direct camera stream fallback so teacher can still see student's face!
+        try {
+          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({
+              video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+              audio: false
+            });
+            if (videoRef.current) {
+              videoRef.current.srcObject = fallbackStream;
+              videoRef.current.play().catch(() => {});
+            }
+            if (webrtcRef.current) {
+              await webrtcRef.current.addLocalStream(fallbackStream);
+            }
+            if (channelRef.current) {
+              channelRef.current.sendSignal("broadcast", {
+                type: "camera_state",
+                active: true,
+                studentName: studentName.trim() || user?.displayName || "Deaf Student"
+              });
+            }
+            setCameraError(null);
+          }
+        } catch (fbErr) {
+          console.warn("[StudentRoom] Direct camera fallback error:", fbErr);
+          setCameraError("Camera unavailable. You can continue participating 100% via text!");
+          setCameraActive(false);
+        }
       });
 
     return () => {
@@ -361,7 +358,7 @@ export default function DeafMeetingRoom() {
     handleSendMessage(qrText, "text_message");
   };
 
-  // Replay Message with 3D Sign Avatar & TTS
+  // Replay Message with Live Captions & TTS
   const handleReplayMessage = (msg) => {
     // 1. Synchronize Live Captions
     setLiveCaption({
@@ -371,15 +368,7 @@ export default function DeafMeetingRoom() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
 
-    // 2. Trigger 3D Sign Avatar animation
-    setAvatarAction("sign_asl");
-    setAvatarSpeaking(true);
-    setTimeout(() => {
-      setAvatarAction("idle");
-      setAvatarSpeaking(false);
-    }, 4500);
-
-    // 3. Optional TTS replay
+    // 2. Optional TTS replay
     if (!isSpeechMuted) {
       speechService.speak(msg.text);
     }
@@ -521,7 +510,7 @@ export default function DeafMeetingRoom() {
                 Join Accessible Meeting
               </h1>
               <p className="text-slate-400 text-xs mt-1 leading-relaxed">
-                Enter your meeting ID or paste the meeting link to join. Communicate naturally using high-visibility text, quick responses, live captions, and synchronized 3D sign avatar.
+                Enter your meeting ID or paste the meeting link to join. Communicate naturally using high-visibility text, quick responses, live captions, and two-way video calling.
               </p>
             </div>
 
@@ -534,7 +523,7 @@ export default function DeafMeetingRoom() {
               <ul className="text-[11px] text-slate-300 space-y-1 list-disc list-inside">
                 <li><strong className="text-white">Microphone is NEVER required</strong> or requested for your session.</li>
                 <li><strong className="text-white">Camera is 100% voluntary</strong>. You can participate entirely through text.</li>
-                <li>Full real-time speech-to-text captions and 3D Sign Avatar included.</li>
+                <li>Full real-time speech-to-text captions and two-way video calling included.</li>
               </ul>
             </div>
 
@@ -676,7 +665,7 @@ export default function DeafMeetingRoom() {
 
   // ══════════════════════════════════════════════════════════════════════
   // VIEW 2: ACTIVE TWO-WAY ACCESSIBLE MEETING ROOM (Section 7)
-  // Fully loaded with Captions, 3D Sign Avatar, Optional Camera, Text Communication
+  // Fully loaded with Captions, Two-Way Video, Voluntary Camera, Text Communication
   // ══════════════════════════════════════════════════════════════════════
   return (
     <div className={`min-h-screen ${themeClasses.bg} font-sans flex flex-col select-none selection:bg-primary/30`}>
@@ -782,7 +771,7 @@ export default function DeafMeetingRoom() {
       {/* ── 2. Main 2-Column Responsive Workspace ── */}
       <div className="flex-1 p-3 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 max-w-7xl mx-auto w-full">
         {/* ════════════════════════════════════════════════════════════════
-            LEFT COLUMN (7 COLS): INCOMING LIVE CAPTIONS, 3D AVATAR & OPTIONAL CAMERA
+            LEFT COLUMN (7 COLS): INCOMING LIVE CAPTIONS & TWO-WAY VIDEO STAGE
             ════════════════════════════════════════════════════════════════ */}
         <div className="lg:col-span-7 flex flex-col gap-4">
           {/* ── A. Real-Time Speech-to-Text Live Captions Banner (Section 5) ── */}
@@ -809,7 +798,7 @@ export default function DeafMeetingRoom() {
             </p>
           </div>
 
-          {/* ── B. Visual Stage: Teacher Live Video Stream & 3D Sign Language Avatar ── */}
+          {/* ── B. Visual Stage: Teacher Live Video Stream & Student Sign Camera ── */}
           <div className="flex flex-col gap-3">
             {/* Stage Layout Controls Toolbar */}
             <div className="flex items-center justify-between px-1">
@@ -835,101 +824,53 @@ export default function DeafMeetingRoom() {
                       ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30"
                       : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30"
                   }`}
-                  title={cameraActive ? "Turn off camera" : "Share camera so teacher sees your sign gestures"}
+                  title={cameraActive ? "Turn off camera" : "Share camera so teacher sees your face and sign gestures"}
                 >
                   <span className="material-symbols-outlined !text-xs">
                     {cameraActive ? "videocam_off" : "videocam"}
                   </span>
-                  <span>{cameraActive ? "Camera ON" : "Share My Video"}</span>
+                  <span>{cameraActive ? "Camera ON" : "Turn Camera ON"}</span>
                 </button>
                 <div className="w-px h-4 bg-slate-800 mx-0.5 hidden sm:block" />
                 <button
+                  type="button"
                   onClick={() => setVideoLayoutMode("split")}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
                     videoLayoutMode === "split" ? "bg-sky-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
                   }`}
                 >
-                  Side-by-Side
+                  Side-by-Side (1:1)
                 </button>
                 <button
-                  onClick={() => setVideoLayoutMode("avatar_focus")}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                    videoLayoutMode === "avatar_focus" ? "bg-cyan-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+                  type="button"
+                  onClick={() => setVideoLayoutMode("teacher_focus")}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                    videoLayoutMode === "teacher_focus" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
                   }`}
                 >
-                  Avatar Focus
+                  Focus Teacher
                 </button>
                 <button
-                  onClick={() => setVideoLayoutMode("video_focus")}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                    videoLayoutMode === "video_focus" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+                  type="button"
+                  onClick={() => setVideoLayoutMode("student_focus")}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                    videoLayoutMode === "student_focus" ? "bg-cyan-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
                   }`}
                 >
-                  Video Focus
+                  Focus Student
                 </button>
               </div>
             </div>
 
-            {/* Grid Layout Container */}
+            {/* Grid Layout Container: Teacher Video & Student Sign Camera */}
             <div className={`grid gap-4 ${
               videoLayoutMode === "split"
                 ? "grid-cols-1 md:grid-cols-2"
                 : "grid-cols-1"
             }`}>
-              {/* Box 1: 3D Sign Language Avatar */}
+              {/* Tile 1: Live Teacher Video Stream (WebRTC) */}
               <div className={`rounded-3xl ${themeClasses.panel} p-4 flex flex-col justify-between relative overflow-hidden ${
-                videoLayoutMode === "avatar_focus" ? "min-h-[380px]" : "min-h-[280px]"
-              }`}>
-                <div className="flex items-center justify-between z-10">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-cyan-400 text-lg">accessibility_new</span>
-                    <span className="text-xs font-bold text-cyan-300">3D Sign Language Avatar</span>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                    avatarAction !== "idle" ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 animate-pulse" : "bg-slate-800 text-slate-400"
-                  }`}>
-                    {avatarAction !== "idle" ? "Signing Speech..." : "Ready"}
-                  </span>
-                </div>
-
-                {/* 3D WebGL Avatar Canvas Container */}
-                <div className={`w-full relative flex items-center justify-center my-1 overflow-hidden rounded-2xl bg-slate-950/40 ${
-                  videoLayoutMode === "avatar_focus" ? "h-80" : "h-64"
-                }`}>
-                  <SignAvatar
-                    gestureId={avatarAction === "sign_asl" ? "hello" : avatarAction}
-                    framing="body"
-                    showControls={false}
-                    className="w-full h-full min-h-[190px]"
-                  />
-                </div>
-
-                {/* Synchronized Avatar Sign Caption & Replay */}
-                <div className="z-10 flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
-                  <span className="text-[11px] text-slate-400 truncate max-w-[200px]">
-                    {avatarAction !== "idle" ? `Signing: ${avatarAction}` : "Synced with incoming speech"}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setAvatarAction("sign_asl");
-                      setAvatarSpeaking(true);
-                      setTimeout(() => {
-                        setAvatarAction("idle");
-                        setAvatarSpeaking(false);
-                      }, 4000);
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
-                    title="Replay signing animation"
-                  >
-                    <span className="material-symbols-outlined text-xs">replay</span>
-                    <span>Replay Sign</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Box 2: Live Teacher Video Stream (WebRTC) */}
-              <div className={`rounded-3xl ${themeClasses.panel} p-4 flex flex-col justify-between relative overflow-hidden ${
-                videoLayoutMode === "video_focus" ? "min-h-[380px]" : "min-h-[280px]"
+                videoLayoutMode === "teacher_focus" ? "min-h-[400px]" : "min-h-[280px]"
               }`}>
                 <div className="flex items-center justify-between z-10">
                   <div className="flex items-center gap-2">
@@ -968,9 +909,9 @@ export default function DeafMeetingRoom() {
                   </div>
                 </div>
 
-                {/* Remote Video Stream Container */}
+                {/* Remote Teacher Video Stream Container */}
                 <div className={`relative w-full rounded-2xl bg-slate-950 border border-slate-800/80 overflow-hidden flex flex-col items-center justify-center my-2 ${
-                  videoLayoutMode === "video_focus" ? "h-80" : "h-64"
+                  videoLayoutMode === "teacher_focus" ? "h-88" : "h-64"
                 }`}>
                   <video
                     ref={remoteVideoRef}
@@ -986,28 +927,6 @@ export default function DeafMeetingRoom() {
                     }`}
                   />
 
-                  {/* Corner PiP preview of student's own camera when active so student sees both teacher and self */}
-                  {cameraActive && (
-                    <div className="absolute bottom-2 right-2 w-28 h-20 rounded-xl overflow-hidden border border-emerald-500/60 shadow-xl bg-black z-20">
-                      <video
-                        ref={(el) => {
-                          if (el && engineRef.current && engineRef.current.stream && el.srcObject !== engineRef.current.stream) {
-                            el.srcObject = engineRef.current.stream;
-                            el.play().catch(() => {});
-                          }
-                        }}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover transform -scale-x-100"
-                      />
-                      <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/70 text-[8px] font-bold text-emerald-300 flex items-center gap-1">
-                        <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
-                        <span>You (Live)</span>
-                      </div>
-                    </div>
-                  )}
-
                   {!remoteVideoActive && (
                     <div className="flex flex-col items-center text-center p-4 gap-2">
                       <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500">
@@ -1016,7 +935,7 @@ export default function DeafMeetingRoom() {
                       <div>
                         <p className="text-xs font-semibold text-slate-300">Teacher Live Broadcast Feed</p>
                         <p className="text-[10px] text-slate-500 max-w-[220px]">
-                          When your instructor starts broadcasting video from the Teacher Studio, their stream will appear here in real time.
+                          When your instructor starts broadcasting video from the Teacher Studio, their stream appears here in real time.
                         </p>
                       </div>
                     </div>
@@ -1032,47 +951,96 @@ export default function DeafMeetingRoom() {
                   <span className="text-[10px] text-slate-500">Zero-Mic Required</span>
                 </div>
               </div>
-            </div>
 
-            {/* Optional Student Sign Camera Accordion (Always voluntary) */}
-            <div className={`rounded-2xl ${themeClasses.panel} p-3 flex flex-col gap-2 border border-slate-800/80`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-slate-400 text-sm">photo_camera</span>
-                  <span className="text-xs font-bold text-slate-300">Your Student Sign Camera (Optional Gesture Recognition)</span>
+              {/* Tile 2: Student Sign Camera & Two-Way Video Stream */}
+              <div className={`rounded-3xl ${themeClasses.panel} p-4 flex flex-col justify-between relative overflow-hidden ${
+                videoLayoutMode === "student_focus" ? "min-h-[400px]" : "min-h-[280px]"
+              }`}>
+                <div className="flex items-center justify-between z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sky-400 text-lg">person</span>
+                    <span className="text-xs font-bold text-sky-300">Your Student Sign Camera</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {detectedSign && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                        <span className="material-symbols-outlined !text-xs">sign_language</span>
+                        <span>{detectedSign.label} ({Math.round(detectedSign.score * 100)}%)</span>
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                      cameraActive ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-slate-800 text-slate-400"
+                    }`}>
+                      {cameraActive ? "Camera ON" : "Camera OFF"}
+                    </span>
+                  </div>
                 </div>
-                <button
-                  onClick={handleToggleCamera}
-                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border transition-all flex items-center gap-1 cursor-pointer ${
-                    cameraActive
-                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                      : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${cameraActive ? "bg-emerald-400 animate-ping" : "bg-slate-500"}`} />
-                  <span>{cameraActive ? "My Camera ON" : "Turn On My Camera"}</span>
-                </button>
-              </div>
 
-              {cameraActive && (
-                <div className="relative w-full h-36 rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden mt-1">
-                  <video
-                    ref={videoRef}
-                    className="w-full h-full object-cover transform -scale-x-100"
-                    playsInline
-                    muted
-                  />
-                  <canvas
-                    ref={canvasRef}
-                    className="absolute inset-0 w-full h-full pointer-events-none transform -scale-x-100"
-                  />
-                  {detectedSign && (
-                    <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-0.5 rounded text-[11px] text-emerald-300 font-bold border border-emerald-500/30">
-                      Sign: {detectedSign.label} ({Math.round(detectedSign.score * 100)}%)
+                {/* Student Camera & Gesture Overlay Container */}
+                <div className={`relative w-full rounded-2xl bg-slate-950 border border-slate-800/80 overflow-hidden flex flex-col items-center justify-center my-2 ${
+                  videoLayoutMode === "student_focus" ? "h-88" : "h-64"
+                }`}>
+                  {cameraActive ? (
+                    <>
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover transform -scale-x-100"
+                      />
+                      <canvas
+                        ref={canvasRef}
+                        className="absolute inset-0 w-full h-full pointer-events-none transform -scale-x-100"
+                      />
+                      {holdProgress > 0 && (
+                        <div className="absolute top-3 left-3 right-3 bg-black/60 backdrop-blur-xs px-2 py-1 rounded-lg border border-white/10 flex items-center gap-2 z-20">
+                          <span className="text-[10px] font-bold text-amber-300">Hold gesture:</span>
+                          <div className="flex-1 bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-amber-400 h-full transition-all duration-75" style={{ width: `${holdProgress}%` }} />
+                          </div>
+                          <span className="text-[10px] text-white font-mono">{holdProgress}%</span>
+                        </div>
+                      )}
+                      {unclearWarning && (
+                        <div className="absolute bottom-2 left-2 right-2 bg-amber-500/90 text-slate-950 text-[10px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 z-20">
+                          <span className="material-symbols-outlined !text-xs">warning</span>
+                          <span>{unclearWarning}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center text-center p-4 gap-2">
+                      <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500">
+                        <span className="material-symbols-outlined text-xl">videocam_off</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-300">Student Camera is Off</p>
+                        <p className="text-[10px] text-slate-500 max-w-[220px]">
+                          Turn on your camera so your teacher can see your face and gesture signs live.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleToggleCamera}
+                        className="mt-1 px-3 py-1 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined !text-xs">videocam</span>
+                        <span>Turn On Camera</span>
+                      </button>
                     </div>
                   )}
                 </div>
-              )}
+
+                {/* Footer status */}
+                <div className="z-10 flex items-center justify-between text-[11px] pt-1 text-slate-400">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${cameraActive ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
+                    <span>{cameraActive ? "Broadcasting Sign Video to Teacher" : "Camera Inactive"}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">16:9 HD Stream</span>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -1175,10 +1143,10 @@ export default function DeafMeetingRoom() {
                         <button
                           onClick={() => handleReplayMessage(msg)}
                           className="text-[10px] text-slate-400 hover:text-cyan-300 flex items-center gap-1 transition-colors"
-                          title="Replay this message with 3D Sign Avatar"
+                          title="Replay this message with captions and speech"
                         >
                           <span className="material-symbols-outlined !text-xs">replay</span>
-                          <span>Replay Sign</span>
+                          <span>Replay</span>
                         </button>
                       </div>
                     )}

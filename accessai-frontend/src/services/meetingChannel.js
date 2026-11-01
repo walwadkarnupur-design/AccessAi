@@ -34,7 +34,13 @@ export class MeetingChannel {
     this.storageHandler = null;
     this.eventSource = null;
     this.signalingUrl = null;
+    this.cloudWs = null;
     this.pingInterval = null;
+
+    // Cloud transport endpoints (guarantees cross-device WebRTC & presence across Vercel deployments)
+    const safeRoom = String(this.meetingId || "accessai-room-402").toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+    this.cloudPostUrl = `https://ntfy.sh/accessai_meet_${safeRoom}`;
+    this.cloudWsUrl = `wss://ntfy.sh/accessai_meet_${safeRoom}/ws`;
 
     // Active participants mapped by ID
     this.participantsMap = new Map();
@@ -113,16 +119,47 @@ export class MeetingChannel {
       console.warn("[MeetingChannel] Supabase realtime channel skipped:", e);
     }
 
-    // 4. Cross-Device Network Transport via SSE Signaling Server
+    // 4. Cloud WebSocket Transport (Guarantees Real-Time Cross-Device & Vercel HTTPS Connectivity)
+    if (typeof WebSocket !== "undefined" && this.cloudWsUrl) {
+      try {
+        this.cloudWs = new WebSocket(this.cloudWsUrl);
+        this.cloudWs.onopen = () => {
+          this.announcePresence("joined");
+          this.pingParticipants();
+        };
+        this.cloudWs.onmessage = (event) => {
+          if (event && event.data) {
+            try {
+              const raw = JSON.parse(event.data);
+              if (raw && raw.event === "message" && raw.message) {
+                const inner = typeof raw.message === "string" ? JSON.parse(raw.message) : raw.message;
+                if (inner && inner.messageType) {
+                  this._handleIncoming(inner);
+                }
+              }
+            } catch (e) {}
+          }
+        };
+        this.cloudWs.onerror = () => {};
+      } catch (wsErr) {
+        console.warn("[MeetingChannel] Cloud transport init skipped:", wsErr);
+      }
+    }
+
+    // 5. Local Dev Network Transport via SSE Signaling Server (Port 5001)
     if (typeof window !== "undefined") {
       try {
+        const isHttps = window.location.protocol === "https:";
         const host = window.location.hostname || "localhost";
         const port = process.env.REACT_APP_SIGNALING_PORT || 5001;
         const defaultUrl = `http://${host}:${port}`;
         const signalingUrl = process.env.REACT_APP_SIGNALING_URL || defaultUrl;
         this.signalingUrl = signalingUrl;
 
-        if (typeof EventSource !== "undefined") {
+        // Never attempt plain http EventSource on https deployments (prevents Mixed Content blocks)
+        const isMixedContent = isHttps && signalingUrl.startsWith("http:");
+
+        if (typeof EventSource !== "undefined" && !isMixedContent) {
           const sseUrl = `${signalingUrl}/events?room=${encodeURIComponent(this.meetingId)}&userId=${encodeURIComponent(this.currentUserId)}`;
           this.eventSource = new EventSource(sseUrl);
           this.eventSource.onopen = () => {
@@ -143,7 +180,7 @@ export class MeetingChannel {
             }
           };
           this.eventSource.onerror = () => {
-            // Silently fall back to BroadcastChannel and localStorage on same origin
+            // Silently fall back to cloudWs, BroadcastChannel, and localStorage
           };
         }
       } catch (err) {
@@ -237,14 +274,30 @@ export class MeetingChannel {
       } catch (e) {}
     }
 
-    if (this.signalingUrl && typeof fetch !== "undefined") {
+    // Cloud HTTP POST transport (Cross-device cloud delivery)
+    if (this.cloudPostUrl && typeof fetch !== "undefined") {
       try {
-        fetch(`${this.signalingUrl}/message`, {
+        fetch(this.cloudPostUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(message)
         }).catch(() => {});
       } catch (e) {}
+    }
+
+    // Local dev signaling server fallback (Skip if on https and signalingUrl is http)
+    if (this.signalingUrl && typeof fetch !== "undefined") {
+      const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+      const isMixed = isHttps && this.signalingUrl.startsWith("http:");
+      if (!isMixed) {
+        try {
+          fetch(`${this.signalingUrl}/message`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(message)
+          }).catch(() => {});
+        } catch (e) {}
+      }
     }
 
     if (this.supabaseChannel) {
@@ -462,6 +515,12 @@ export class MeetingChannel {
       this._broadcast(leaveMsg);
     } catch (e) {}
 
+    if (this.cloudWs) {
+      try {
+        this.cloudWs.close();
+      } catch (e) {}
+      this.cloudWs = null;
+    }
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.close();

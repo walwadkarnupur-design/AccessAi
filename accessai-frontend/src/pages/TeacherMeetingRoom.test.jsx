@@ -242,7 +242,7 @@ describe("WebRTC Manager & MeetingChannel Signaling", () => {
 });
 
 describe("Deaf Meeting Room Video & Sign Presentation Integration", () => {
-  test("student room connects with zero mandatory mic and renders layout toggles", async () => {
+  test("student room connects with zero mandatory mic and renders two-way video stage", async () => {
     render(
       <AllProviders>
         <DeafMeetingRoom />
@@ -259,18 +259,16 @@ describe("Deaf Meeting Room Video & Sign Presentation Integration", () => {
 
     // In-Room visual stage
     expect(await screen.findByText(/Visual Presentation Stage/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Side-by-Side/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Avatar Focus/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Video Focus/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Side-by-Side \(1:1\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Focus Teacher/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Focus Student/i })).toBeInTheDocument();
 
-    // Teacher Video Container & 3D Sign Avatar Container
+    // Teacher Video Container & Student Sign Camera Container
     expect(screen.getByText(/Teacher Video Broadcast/i)).toBeInTheDocument();
-    expect(screen.getByText(/3D Sign Language Avatar/i)).toBeInTheDocument();
-    expect(screen.getByTestId("sign-avatar-mock")).toBeInTheDocument();
+    expect(screen.getByText(/Your Student Sign Camera/i)).toBeInTheDocument();
 
-    // Voluntary student camera button (not forced)
-    expect(screen.getByRole("button", { name: /Turn On My Camera/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Share My Video/i })).toBeInTheDocument();
+    // Voluntary camera toggle button
+    expect(screen.getByRole("button", { name: /Camera ON/i })).toBeInTheDocument();
   });
 
   test("WebRtcManager addLocalStream attaches tracks and initiates renegotiation", async () => {
