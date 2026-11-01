@@ -418,7 +418,7 @@ export default function TeacherDashboard() {
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="text-xs font-bold text-slate-900 truncate leading-tight">{teacherName}</span>
-                <span className="text-[10px] text-slate-500 truncate">{teacherEmail} | Teacher / Host</span>
+                <span className="text-[10px] text-slate-500 truncate">{teacherEmail}</span>
               </div>
             </div>
             <button
@@ -1011,10 +1011,20 @@ export default function TeacherDashboard() {
                         <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200/60">
                           <button
                             onClick={() => handleSendIntervention(item)}
-                            className="px-3.5 py-1.5 rounded-lg bg-[#0866F5] hover:bg-blue-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                            disabled={syncingStudentId === (item.studentId || item.id)}
+                            className="px-3.5 py-1.5 rounded-lg bg-[#0866F5] hover:bg-blue-600 disabled:bg-blue-400 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
                           >
-                            <span className="material-symbols-outlined !text-sm">send</span>
-                            <span>Send 1-Click Guidance</span>
+                            {syncingStudentId === (item.studentId || item.id) ? (
+                              <>
+                                <span className="material-symbols-outlined !text-sm animate-spin">sync</span>
+                                <span>Syncing to Meko...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="material-symbols-outlined !text-sm">send</span>
+                                <span>Send 1-Click Guidance</span>
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>
